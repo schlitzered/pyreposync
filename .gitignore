@@ -1,0 +1,5 @@
+.idea
+pyreposync.egg-info
+dist
+venv
+*xml
