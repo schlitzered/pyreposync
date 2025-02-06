@@ -6,7 +6,6 @@ import logging
 import sys
 import threading
 import time
-from logging.handlers import TimedRotatingFileHandler
 
 from pyreposync.downloader import Downloader
 from pyreposync.exceptions import OSRepoSyncException, OSRepoSyncHashError
@@ -16,64 +15,125 @@ from pyreposync.rpm_sync import RPMSync
 def main():
     parser = argparse.ArgumentParser(description="OS Repo Sync Tool")
 
-    parser.add_argument("--cfg", dest="cfg", action="store",
-                        default="/etc/pyreposync/reposync.ini",
-                        help="Full path to configuration")
+    parser.add_argument(
+        "--cfg",
+        dest="cfg",
+        action="store",
+        default="/etc/pyreposync/reposync.ini",
+        help="Full path to configuration",
+    )
 
-    parser.add_argument("--repo", dest="repo", action="store",
-                        default=None,
-                        help="""
+    parser.add_argument(
+        "--repo",
+        dest="repo",
+        action="store",
+        default=None,
+        help="""
                         execute command on this repository, if not set, 
                         command applies to all configured repositories.
                         
                         This command is mutually exclusive with --tags
-                        """
-                        )
+                        """,
+    )
 
-    parser.add_argument("--tags", dest="tags", action="store",
-                        default=None,
-                        help="""
+    parser.add_argument(
+        "--tags",
+        dest="tags",
+        action="store",
+        default=None,
+        help="""
                         Comma separated list of repo tags the command applies to.
                         putting a '!' in front of a tag negates it.
                         At least one not negated tag has to be match.
                         
                         This command is mutually exclusive with --repo
-                        """
-                        )
+                        """,
+    )
 
-    subparsers = parser.add_subparsers(help='commands', dest='method')
+    subparsers = parser.add_subparsers(
+        help="commands",
+        dest="method",
+    )
     subparsers.required = True
 
     snap_cleanup_parser = subparsers.add_parser(
-        'snap_cleanup', help='remove all unnamed snapshots and unreferenced rpms.'
+        "snap_cleanup",
+        help="remove all unnamed snapshots and unreferenced rpms.",
     )
-    snap_cleanup_parser.set_defaults(method='snap_cleanup')
+    snap_cleanup_parser.set_defaults(
+        method="snap_cleanup",
+    )
 
-    snap_list_parser = subparsers.add_parser('snap_list', help='list snapshots')
-    snap_list_parser.set_defaults(method='snap_list')
+    snap_list_parser = subparsers.add_parser(
+        "snap_list",
+        help="list snapshots",
+    )
+    snap_list_parser.set_defaults(
+        method="snap_list",
+    )
 
-    snap_name_parser = subparsers.add_parser('snap_name', help='give timed snapshot a name')
-    snap_name_parser.set_defaults(method='snap_name')
-    snap_name_parser.add_argument("--timestamp", dest="timestamp", action="store", required=True,
-                                  default=None,
-                                  help="source timestampm might also be a named snapshot or latest")
-    snap_name_parser.add_argument("--name", dest="snapname", action="store", required=True,
-                                  default=None,
-                                  help="name to be created")
+    snap_name_parser = subparsers.add_parser(
+        "snap_name",
+        help="give timed snapshot a name",
+    )
+    snap_name_parser.set_defaults(
+        method="snap_name",
+    )
+    snap_name_parser.add_argument(
+        "--timestamp",
+        dest="timestamp",
+        action="store",
+        required=True,
+        default=None,
+        help="source timestampm might also be a named snapshot or latest",
+    )
+    snap_name_parser.add_argument(
+        "--name",
+        dest="snapname",
+        action="store",
+        required=True,
+        default=None,
+        help="name to be created",
+    )
 
-    snap_unname_parser = subparsers.add_parser('snap_unname', help='remove name from timed snapshot')
-    snap_unname_parser.set_defaults(method='snap_unname')
-    snap_unname_parser.add_argument("--name", dest="snapname", action="store", required=True,
-                                    help="name to be removed")
+    snap_unname_parser = subparsers.add_parser(
+        "snap_unname",
+        help="remove name from timed snapshot",
+    )
+    snap_unname_parser.set_defaults(
+        method="snap_unname",
+    )
+    snap_unname_parser.add_argument(
+        "--name",
+        dest="snapname",
+        action="store",
+        required=True,
+        help="name to be removed",
+    )
 
-    snap_parser = subparsers.add_parser('snap', help='create new snapshots')
-    snap_parser.set_defaults(method='snap')
+    snap_parser = subparsers.add_parser(
+        "snap",
+        help="create new snapshots",
+    )
+    snap_parser.set_defaults(
+        method="snap",
+    )
 
-    sync_parser = subparsers.add_parser('sync', help='sync all repos')
-    sync_parser.set_defaults(method='sync')
+    sync_parser = subparsers.add_parser(
+        "sync",
+        help="sync all repos",
+    )
+    sync_parser.set_defaults(
+        method="sync",
+    )
 
-    validate_parser = subparsers.add_parser('validate', help='re validate package downloads')
-    validate_parser.set_defaults(method='validate')
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="re validate package downloads",
+    )
+    validate_parser.set_defaults(
+        method="validate",
+    )
 
     parsed_args = parser.parse_args()
     try:
@@ -91,7 +151,7 @@ def main():
         snapname=snapname,
         repo=parsed_args.repo,
         tags=parsed_args.tags,
-        timestamp=timestamp
+        timestamp=timestamp,
     )
     osreposync.work()
 
@@ -107,7 +167,7 @@ class PyRepoSync:
         self._tags = None
         self._timestamp = timestamp
         self.tags = tags
-        self.log = logging.getLogger('application')
+        self.log = logging.getLogger("application")
         self.config.read_file(open(self._config_file))
         self._config_dict = self._cfg_to_dict(self.config)
         self._logging()
@@ -133,16 +193,18 @@ class PyRepoSync:
     @tags.setter
     def tags(self, tags):
         if tags:
-            self._tags = tags.split(',')
+            self._tags = tags.split(",")
 
     @property
     def timestamp(self):
         return self._timestamp
 
     def _logging(self):
-        logfmt = logging.Formatter('%(asctime)sUTC - %(levelname)s - %(threadName)s - %(message)s')
+        logfmt = logging.Formatter(
+            "%(asctime)sUTC - %(levelname)s - %(threadName)s - %(message)s"
+        )
         logfmt.converter = time.gmtime
-        aap_level = self.config.get('main', 'loglevel')
+        aap_level = self.config.get("main", "loglevel")
         handler = logging.StreamHandler()
 
         handler.setFormatter(logfmt)
@@ -187,35 +249,39 @@ class PyRepoSync:
         return self._config_dict
 
     def get_jobs(self, date, section):
-        versions = self.config.get(section, 'versions', fallback=None)
+        versions = self.config.get(section, "versions", fallback=None)
         jobs = set()
         if versions:
-            for version in versions.split(','):
+            for version in versions.split(","):
                 job = RPMSync(
-                    base_url=self.config.get(section, 'baseurl').replace(':VERSION:', version),
-                    destination=self.config.get('main', 'destination'),
-                    reponame=section[:-4].replace(':VERSION:', version),
-                    syncdir=self.config.get(section, 'syncdir', fallback=None),
+                    base_url=self.config.get(section, "baseurl").replace(
+                        ":VERSION:", version
+                    ),
+                    destination=self.config.get("main", "destination"),
+                    reponame=section[:-4].replace(":VERSION:", version),
+                    syncdir=self.config.get(section, "syncdir", fallback=None),
                     date=date,
-                    treeinfo=self.config.get(section, 'treeinfo', fallback='.treeinfo'),
-                    proxy=self.config.get('main', 'proxy', fallback=None),
-                    client_cert=self.config.get(section, 'sslclientcert', fallback=None),
-                    client_key=self.config.get(section, 'sslclientkey', fallback=None),
-                    ca_cert=self.config.get(section, 'sslcacert', fallback=None),
+                    treeinfo=self.config.get(section, "treeinfo", fallback=".treeinfo"),
+                    proxy=self.config.get("main", "proxy", fallback=None),
+                    client_cert=self.config.get(
+                        section, "sslclientcert", fallback=None
+                    ),
+                    client_key=self.config.get(section, "sslclientkey", fallback=None),
+                    ca_cert=self.config.get(section, "sslcacert", fallback=None),
                 )
                 jobs.add(job)
         else:
             job = RPMSync(
-                base_url=self.config.get(section, 'baseurl'),
-                destination=self.config.get('main', 'destination'),
+                base_url=self.config.get(section, "baseurl"),
+                destination=self.config.get("main", "destination"),
                 reponame=section[:-4],
-                syncdir=self.config.get(section, 'syncdir', fallback=None),
+                syncdir=self.config.get(section, "syncdir", fallback=None),
                 date=date,
-                treeinfo=self.config.get(section, 'treeinfo', fallback='.treeinfo'),
-                proxy=self.config.get('main', 'proxy', fallback=None),
-                client_cert=self.config.get(section, 'sslclientcert', fallback=None),
-                client_key=self.config.get(section, 'sslclientkey', fallback=None),
-                ca_cert=self.config.get(section, 'sslcacert', fallback=None),
+                treeinfo=self.config.get(section, "treeinfo", fallback=".treeinfo"),
+                proxy=self.config.get("main", "proxy", fallback=None),
+                client_cert=self.config.get(section, "sslclientcert", fallback=None),
+                client_key=self.config.get(section, "sslclientkey", fallback=None),
+                ca_cert=self.config.get(section, "sslcacert", fallback=None),
             )
             jobs.add(job)
         return jobs
@@ -223,7 +289,7 @@ class PyRepoSync:
     def get_sections(self):
         sections = set()
         for section in self.config:
-            if section.endswith(':rpm'):
+            if section.endswith(":rpm"):
                 if self.repo and section != self.repo:
                     continue
                 if self._tags:
@@ -234,18 +300,23 @@ class PyRepoSync:
 
     def work(self):
         self.log.info("starting up")
-        date = datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')
+        date = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
         queue = collections.deque()
         for section in self.get_sections():
             queue.append(self.get_jobs(date=date, section=section))
         workers = set()
-        if self.method == 'sync':
-            num_worker = self.config.getint('main', 'downloaders', fallback=1)
+        if self.method == "sync":
+            num_worker = self.config.getint("main", "downloaders", fallback=1)
         else:
             num_worker = 1
         for _ in range(num_worker):
-            workers.add(RepoSyncThread(
-                queue=queue, action=self.method, snapname=self.snapname, timestamp=self.timestamp)
+            workers.add(
+                RepoSyncThread(
+                    queue=queue,
+                    action=self.method,
+                    snapname=self.snapname,
+                    timestamp=self.timestamp,
+                )
             )
 
         for worker in workers:
@@ -259,11 +330,11 @@ class PyRepoSync:
 
     def validate_tags(self, section):
         try:
-            section_tags = self.config.get(section, 'tags').split(',')
+            section_tags = self.config.get(section, "tags").split(",")
         except Exception as err:
             return False
         for tag in self.tags:
-            if tag.startswith('!'):
+            if tag.startswith("!"):
                 if tag[1:] in section_tags:
                     return False
             else:
@@ -282,7 +353,7 @@ class RepoSyncThread(threading.Thread):
         self._status = 0
         self._timestamp = timestamp
         self.daemon = True
-        self.log = logging.getLogger('application')
+        self.log = logging.getLogger("application")
 
     @property
     def action(self):
@@ -316,7 +387,9 @@ class RepoSyncThread(threading.Thread):
                 job.sync()
                 self.log.info("{0} done repo {1}".format(self.action, job.reponame))
             except OSRepoSyncException:
-                self.log.fatal("could not {0} repo {1}".format(self.action, job.reponame))
+                self.log.fatal(
+                    "could not {0} repo {1}".format(self.action, job.reponame)
+                )
                 self.status = 1
 
     def do_snap(self, jobs):
@@ -327,7 +400,9 @@ class RepoSyncThread(threading.Thread):
                 job.snap()
                 self.log.info("{0} done repo {1}".format(self.action, job.reponame))
             except OSRepoSyncException:
-                self.log.fatal("could not {0} repo {1}".format(self.action, job.reponame))
+                self.log.fatal(
+                    "could not {0} repo {1}".format(self.action, job.reponame)
+                )
                 self.status = 1
 
     def do_snap_cleanup(self, jobs):
@@ -338,7 +413,9 @@ class RepoSyncThread(threading.Thread):
                 job.snap_cleanup()
                 self.log.info("{0} done repo {1}".format(self.action, job.reponame))
             except OSRepoSyncException:
-                self.log.fatal("could not {0} repo {1}".format(self.action, job.reponame))
+                self.log.fatal(
+                    "could not {0} repo {1}".format(self.action, job.reponame)
+                )
                 self.status = 1
 
     def do_snap_list(self, jobs):
@@ -349,14 +426,27 @@ class RepoSyncThread(threading.Thread):
                 self.log.info("Repository: {0}".format(job.reponame))
                 self.log.info("The following timestamp snapshots exist:")
                 for timestamp in job.snap_list_timestamp_snapshots():
-                    self.log.info("{0} -> {1}".format(timestamp, referenced_timestamps.get(timestamp, [])))
+                    self.log.info(
+                        "{0} -> {1}".format(
+                            timestamp, referenced_timestamps.get(timestamp, [])
+                        )
+                    )
                 self.log.info("The following named snapshots exist:")
                 base = "{0}/snap/{1}/".format(job.destination, job.reponame)
                 for named in job.snap_list_named_snapshots():
                     named = "named/{0}".format(named)
-                    self.log.info("{0} -> {1}".format(named, job.snap_list_named_snapshot_target("{0}/{1}".format(base, named))))
+                    self.log.info(
+                        "{0} -> {1}".format(
+                            named,
+                            job.snap_list_named_snapshot_target(
+                                "{0}/{1}".format(base, named)
+                            ),
+                        )
+                    )
                 latest = "{0}/latest".format(base)
-                self.log.info("latest -> {0}".format(job.snap_list_named_snapshot_target(latest)))
+                self.log.info(
+                    "latest -> {0}".format(job.snap_list_named_snapshot_target(latest))
+                )
 
             except OSRepoSyncException:
                 self.status = 1
@@ -369,7 +459,9 @@ class RepoSyncThread(threading.Thread):
                 job.snap_name(self.timestamp, self.snapname)
                 self.log.info("{0} done repo {1}".format(self.action, job.reponame))
             except OSRepoSyncException:
-                self.log.fatal("could not {0} repo {1}".format(self.action, job.reponame))
+                self.log.fatal(
+                    "could not {0} repo {1}".format(self.action, job.reponame)
+                )
                 self.status = 1
 
     def do_snap_unname(self, jobs):
@@ -380,7 +472,9 @@ class RepoSyncThread(threading.Thread):
                 job.snap_unname(self.snapname)
                 self.log.info("{0} done repo {1}".format(self.action, job.reponame))
             except OSRepoSyncException:
-                self.log.fatal("could not {0} repo {1}".format(self.action, job.reponame))
+                self.log.fatal(
+                    "could not {0} repo {1}".format(self.action, job.reponame)
+                )
                 self.status = 1
 
     def do_validate(self, jobs):
@@ -391,15 +485,17 @@ class RepoSyncThread(threading.Thread):
                 self.log.info("{0} start repo {1}".format(self.action, job.reponame))
                 packages.update(job.revalidate2())
             except OSRepoSyncException:
-                self.log.fatal("could not {0} repo {1}".format(self.action, job.reponame))
+                self.log.fatal(
+                    "could not {0} repo {1}".format(self.action, job.reponame)
+                )
                 self.status = 1
         for destination, hash_info in packages.items():
             try:
                 self.log.info("validating: {0}".format(destination))
                 _downloader.check_hash(
                     destination=destination,
-                    checksum=hash_info['hash_sum'],
-                    hash_type=hash_info['hash_algo']
+                    checksum=hash_info["hash_sum"],
+                    hash_type=hash_info["hash_algo"],
                 )
             except OSRepoSyncHashError:
                 self.log.error("hash mismatch for: {0}".format(destination))
@@ -410,19 +506,19 @@ class RepoSyncThread(threading.Thread):
         while True:
             try:
                 jobs = self.queue.pop()
-                if self.action is 'sync':
+                if self.action is "sync":
                     self.do_sync(jobs)
-                elif self.action is 'snap_cleanup':
+                elif self.action is "snap_cleanup":
                     self.do_snap_cleanup(jobs)
-                elif self.action is 'snap_list':
+                elif self.action is "snap_list":
                     self.do_snap_list(jobs)
-                elif self.action is 'snap_name':
+                elif self.action is "snap_name":
                     self.do_snap_name(jobs)
-                elif self.action is 'snap_unname':
+                elif self.action is "snap_unname":
                     self.do_snap_unname(jobs)
-                elif self.action is 'snap':
+                elif self.action is "snap":
                     self.do_snap(jobs)
-                elif self.action is 'validate':
+                elif self.action is "validate":
                     self.do_validate(jobs)
             except IndexError:
                 break

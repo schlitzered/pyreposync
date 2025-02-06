@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling", "hatch-requirements-txt"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyreposync"
+version = "0.1.0"
+requires-python = ">=3.9"
+authors = [
+  {name = "Stephan.Schultchen", email = "sschultchen@gmail.com"},
+]
+description = "Orbit Api"
+dynamic = ["dependencies"]
+license = {file = "LICENSE.txt"}
+keywords = []
+classifiers = [
+  "Programming Language :: Python"
+]
+
+[project.scripts]
+pyreposync = "pyreposync:main"
+
+[project.urls]
+Source = "https://github.com/schlitzered/pyreposync"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyreposync"]
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+

@@ -11,12 +11,9 @@ from pyreposync.exceptions import OSRepoSyncDownLoadError, OSRepoSyncHashError
 
 class Downloader(object):
     def __init__(self, proxy=None, client_cert=None, client_key=None, ca_cert=None):
-        self.log = logging.getLogger('application')
+        self.log = logging.getLogger("application")
         if proxy:
-            self._proxy = {
-                'http': proxy,
-                'https': proxy
-            }
+            self._proxy = {"http": proxy, "https": proxy}
         else:
             self._proxy = None
         if client_cert and client_key:
@@ -43,18 +40,18 @@ class Downloader(object):
     def check_hash(self, destination, checksum, hash_type):
         self.log.debug("validating hash")
         hasher = None
-        if hash_type == 'md5':
+        if hash_type == "md5":
             hasher = hashlib.md5()
-        elif hash_type == 'sha':
+        elif hash_type == "sha":
             hasher = hashlib.sha1()
-        elif hash_type == 'sha1':
+        elif hash_type == "sha1":
             hasher = hashlib.sha1()
-        elif hash_type == 'sha256':
+        elif hash_type == "sha256":
             hasher = hashlib.sha256()
-        elif hash_type == 'sha512':
+        elif hash_type == "sha512":
             hasher = hashlib.sha512()
 
-        with open(destination, 'rb') as dest:
+        with open(destination, "rb") as dest:
             hasher.update(dest.read())
             self.log.debug("expected hash: {0}".format(hasher.hexdigest()))
             self.log.debug("actual hash: {0}".format(checksum))
@@ -62,7 +59,7 @@ class Downloader(object):
                 self.log.debug("download valid: {0}".format(destination))
             else:
                 self.log.error("download invalid: {0}".format(destination))
-                raise OSRepoSyncHashError('download invalid: {0}'.format(destination))
+                raise OSRepoSyncHashError("download invalid: {0}".format(destination))
 
     def get(self, url, destination, checksum=None, hash_type=None, replace=False):
         self.log.info("downloading: {0}".format(url))
@@ -95,14 +92,18 @@ class Downloader(object):
                 os.makedirs(os.path.dirname(destination))
             except OSError:
                 pass
-        r = requests.get(url, stream=True, proxies=self.proxy, cert=self.cert, verify=self.ca_cert)
+        r = requests.get(
+            url, stream=True, proxies=self.proxy, cert=self.cert, verify=self.ca_cert
+        )
         if r.status_code == 200:
-            with open(destination, 'wb', 0) as dst:
+            with open(destination, "wb", 0) as dst:
                 r.raw.decode_content = True
                 shutil.copyfileobj(r.raw, dst)
                 dst.flush()
         else:
             raise OSRepoSyncDownLoadError()
         if checksum:
-            self.check_hash(destination=destination, checksum=checksum, hash_type=hash_type)
+            self.check_hash(
+                destination=destination, checksum=checksum, hash_type=hash_type
+            )
         self.log.info("successfully fetched: {0}".format(url))
