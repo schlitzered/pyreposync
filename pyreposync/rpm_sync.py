@@ -21,7 +21,6 @@ class RPMSync:
         reponame,
         date,
         treeinfo,
-        syncdir=None,
         proxy=None,
         client_cert=None,
         client_key=None,
@@ -31,7 +30,6 @@ class RPMSync:
         self._date = date
         self._destination = destination
         self._reponame = reponame
-        self._syncdir = syncdir
         self._treeinfo = treeinfo
         self.downloader = Downloader(
             proxy=proxy, client_cert=client_cert, client_key=client_key, ca_cert=ca_cert
@@ -55,22 +53,15 @@ class RPMSync:
         return self._reponame
 
     @property
-    def syncdir(self):
-        if not self._syncdir:
-            return self.reponame
-        else:
-            return self._syncdir
-
-    @property
     def treeinfo(self):
         return self._treeinfo
 
-    def packages(self):
+    def packages(self, base_path=None):
+        if not base_path:
+            base_path = f"{self.destination}/sync/{self.reponame}"
         primary = None
-        for location, hash_algo, hash_sum in self.repomod_files():
-            destination = "{0}/sync/{1}/{2}".format(
-                self.destination, self.reponame, location
-            )
+        for location, hash_algo, hash_sum in self.repomod_files(base_path=base_path):
+            destination = f"{base_path}/{location}"
             if "primary.xml" in destination.lower():
                 primary = destination
         if not primary:
@@ -94,18 +85,43 @@ class RPMSync:
             location = package.find("{http://linux.duke.edu/metadata/common}location")
             yield location.get("href"), hash_algo, hash_sum
 
+    def migrate(self):
+        for location, hash_algo, hash_sum in self.packages():
+            destination_old = f"{self.destination}/sync/{self.reponame}/{location}"
+            destination_new = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
+            try:
+                os.remove(destination_new)
+                os.rename(destination_old, destination_new)
+                os.symlink(destination_new, destination_old)
+            except FileNotFoundError:
+                self.log.error(f"could not migrate {location}: {destination_old} not found")
+                continue
+            except OSError as err:
+                self.log.error(f"could not migrate {location}: {err}")
+                continue
+            self.log.info(f"migrated {location} to {destination_new}")
+
+        for snap in self.snap_list_timestamp_snapshots():
+            self.log.info(f"migrating {snap}")
+            base_path = f"{self.destination}/snap/{self.reponame}/{snap}"
+            for location, hash_algo, hash_sum in self.packages(base_path=base_path):
+                dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
+                src = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
+                try:
+                    os.unlink(dst)
+                    os.symlink(src, dst)
+                except OSError:
+                    pass
+
+
     def sync_packages(self):
         for location, hash_algo, hash_sum in self.packages():
-            url = "{0}{1}".format(self.base_url, location)
-            destination = "{0}/sync/{1}/{2}".format(
-                self.destination, self.syncdir, location
-            )
+            url = f"{self.base_url}{location}"
+            destination = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=False)
 
     def treeinfo_files(self):
-        treeinfo_file = "{0}/sync/{1}/{2}".format(
-            self.destination, self.reponame, self.treeinfo
-        )
+        treeinfo_file = f"{self.destination}/sync/{self.reponame}/{self.treeinfo}"
         treeinfo = configparser.ConfigParser()
         treeinfo.optionxform = str
         try:
@@ -128,10 +144,8 @@ class RPMSync:
                 yield file, None, None
 
     def sync_treeinfo(self):
-        url = "{0}{1}".format(self.base_url, self.treeinfo)
-        destination = "{0}/sync/{1}/{2}".format(
-            self.destination, self.reponame, self.treeinfo
-        )
+        url = f"{self.base_url}{self.treeinfo}"
+        destination = f"{self.destination}/sync/{self.reponame}/{self.treeinfo}"
         try:
             self.downloader.get(url, destination, replace=True)
         except OSRepoSyncException:
@@ -139,17 +153,13 @@ class RPMSync:
         for file, hash_algo, hash_sum in self.treeinfo_files():
             if file == "repodata/repomd.xml":
                 continue
-            url = "{0}{1}".format(self.base_url, file)
-            destination = "{0}/sync/{1}/{2}".format(
-                self.destination, self.reponame, file
-            )
+            url = f"{self.base_url}{file}"
+            destination = f"{self.destination}/sync/{self.reponame}/{file}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
 
-    def repomod_files(self):
-        destination = "{0}/sync/{1}/repodata/repomd.xml".format(
-            self.destination, self.reponame
-        )
-        repomd = xml.etree.ElementTree.parse(destination).getroot()
+    def repomod_files(self, base_path):
+        base_path = f"{base_path}/repodata/repomd.xml"
+        repomd = xml.etree.ElementTree.parse(base_path).getroot()
         datas = repomd.findall("{http://linux.duke.edu/metadata/repo}data")
         for data in datas:
             checksum = data.find("{http://linux.duke.edu/metadata/repo}checksum")
@@ -159,50 +169,26 @@ class RPMSync:
             yield location.get("href"), hash_algo, hash_sum
 
     def revalidate(self):
-        try:
-            for location, hash_algo, hash_sum in self.packages():
-                destination = "{0}/sync/{1}/{2}".format(
-                    self.destination, self.syncdir, location
-                )
-                try:
-                    self.log.info("validating: {0}".format(destination))
-                    self.downloader.check_hash(
-                        destination=destination, checksum=hash_sum, hash_type=hash_algo
-                    )
-                except OSRepoSyncHashError:
-                    self.log.error("hash mismatch for: {0}".format(destination))
-        except FileNotFoundError:
-            self.log.error("no repodata found")
-
-    def revalidate2(self):
         packages = dict()
         try:
             for location, hash_algo, hash_sum in self.packages():
-                destination = "{0}/sync/{1}/{2}".format(
-                    self.destination, self.syncdir, location
-                )
+                destination = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
                 packages[destination] = {"hash_algo": hash_algo, "hash_sum": hash_sum}
         except FileNotFoundError:
             self.log.error("no repodata found")
         return packages
 
     def sync_repomod(self):
-        url = "{0}repodata/repomd.xml".format(self.base_url)
-        destination = "{0}/sync/{1}/repodata/repomd.xml".format(
-            self.destination, self.reponame
-        )
+        url = f"{self.base_url}repodata/repomd.xml"
+        destination = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         try:
-            shutil.rmtree(
-                "{0}/sync/{1}/repodata/".format(self.destination, self.reponame)
-            )
+            shutil.rmtree(f"{self.destination}/sync/{self.reponame}/repodata/")
         except FileNotFoundError:
             pass
         self.downloader.get(url, destination, replace=True)
         for location, hash_algo, hash_sum in self.repomod_files():
-            url = "{0}{1}".format(self.base_url, location)
-            destination = "{0}/sync/{1}/{2}".format(
-                self.destination, self.reponame, location
-            )
+            url = f"{self.base_url}{location}"
+            destination = f"{self.destination}/sync/{self.reponame}/{location}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
         self.sync_packages()
         self.sync_treeinfo()
@@ -212,11 +198,9 @@ class RPMSync:
         self.snap_repodata()
         self.snap_treeinfo()
         self.snap_packages()
-        current = "{0}/snap/{1}/{2}".format(self.destination, self.reponame, self.date)
-        latest = "{0}/snap/{1}/latest".format(self.destination, self.reponame)
-        timestamp = "{0}/snap/{1}/{2}/timestamp".format(
-            self.destination, self.reponame, self.date
-        )
+        current = f"{self.destination}/snap/{self.reponame}/{self.date}"
+        latest = f"{self.destination}/snap/{self.reponame}/latest"
+        timestamp = f"{self.destination}/snap/{self.reponame}/{self.date}/timestamp"
         self.log.info("setting latest to current release")
         try:
             os.unlink(latest)
@@ -224,29 +208,27 @@ class RPMSync:
             pass
         os.symlink(current, latest)
         with open(timestamp, "w") as _timestamp:
-            _timestamp.write("{0}\n".format(self.date))
+            _timestamp.write(f"{self.destination}\n")
         self.log.info("done creating snapshot")
 
     def snap_cleanup(self):
         referenced_timestamps = self.snap_list_get_referenced_timestamps()
         for snap in self.snap_list_timestamp_snapshots():
             if snap not in referenced_timestamps:
-                snap = "{0}/snap/{1}/{2}".format(self.destination, self.reponame, snap)
+                snap = f"{self.destination}/snap/{self.reponame}/{snap}"
                 shutil.rmtree(snap)
 
     def snap_list_get_referenced_timestamps(self):
         result = dict()
-        base = "{0}/snap/{1}/".format(self.destination, self.reponame)
+        base = f"{self.destination}/snap/{self.reponame}/"
         for candidate in self.snap_list_named_snapshots():
-            candidate = "named/{0}".format(candidate)
-            timestamp = self.snap_list_named_snapshot_target(
-                "{0}/{1}".format(base, candidate)
-            )
+            candidate = f"named/{candidate}"
+            timestamp = self.snap_list_named_snapshot_target(f"{base}/{candidate}")
             if timestamp not in result:
                 result[timestamp] = [candidate]
             else:
                 result[timestamp].append(candidate)
-        timestamp = self.snap_list_named_snapshot_target("{0}/latest".format(base))
+        timestamp = self.snap_list_named_snapshot_target(f"{base}/latest")
         if timestamp not in result:
             result[timestamp] = ["latest"]
         else:
@@ -255,9 +237,7 @@ class RPMSync:
 
     def snap_list_named_snapshots(self):
         try:
-            return os.listdir(
-                "{0}/snap/{1}/named".format(self.destination, self.reponame)
-            )
+            return os.listdir(f"{self.destination}/snap/{self.reponame}/named")
         except FileNotFoundError:
             return []
 
@@ -270,7 +250,7 @@ class RPMSync:
 
     def snap_list_timestamp_snapshots(self):
         try:
-            result = os.listdir("{0}/snap/{1}/".format(self.destination, self.reponame))
+            result = os.listdir(f"{self.destination}/snap/{self.reponame}/")
             try:
                 result.remove("latest")
             except ValueError:
@@ -291,29 +271,23 @@ class RPMSync:
                 raise ValueError
         except ValueError:
             self.log.error(
-                "{0} is not a valid timestamp, checking if its a named snapshot".format(
-                    timestamp
-                )
+                f"{timestamp} is not a valid timestamp, checking if its a named snapshot"
             )
-            source = "{0}/snap/{1}/{2}".format(
-                self.destination, self.reponame, timestamp
-            )
+            source = f"{self.destination}/snap/{self.reponame}/{timestamp}"
             _timestamp = self.snap_list_named_snapshot_target(source)
             if _timestamp:
-                self.log.info("setting timestamp to {0}".format(_timestamp))
+                self.log.info(f"setting timestamp to {_timestamp}")
                 timestamp = _timestamp
             else:
-                raise OSRepoSyncException("{0} is not a valid named snapshot")
-        source = "{0}/snap/{1}/{2}".format(self.destination, self.reponame, timestamp)
-        target = "{0}/snap/{1}/named/{2}".format(
-            self.destination, self.reponame, snapname
-        )
-        target_dir = "{0}/snap/{1}/named/".format(self.destination, self.reponame)
+                raise OSRepoSyncException(f"{snapname} is not a valid named snapshot")
+        source = f"{self.destination}/snap/{self.reponame}/{timestamp}"
+        target = f"{self.destination}/snap/{self.reponame}/named/{snapname}"
+        target_dir = f"{self.destination}/snap/{self.reponame}/named/"
         if os.path.isdir(source):
-            self.log.debug("source directory exists: {0}".format(source))
+            self.log.debug(f"source directory exists: {source}")
         else:
-            self.log.debug("source directory missing: {0}".format(source))
-            raise OSRepoSyncException("Source directory missing: {0}".format(source))
+            self.log.debug(f"source directory missing: {source}")
+            raise OSRepoSyncException(f"Source directory missing: {source}")
         try:
             os.makedirs(os.path.dirname(target_dir))
         except OSError:
@@ -327,9 +301,7 @@ class RPMSync:
 
     def snap_unname(self, snapname):
         self.log.info("removing named snapshot")
-        target = "{0}/snap/{1}/named/{2}".format(
-            self.destination, self.reponame, snapname
-        )
+        target = f"{self.destination}/snap/{self.reponame}/named/{snapname}"
         try:
             os.unlink(target)
         except FileNotFoundError:
@@ -338,22 +310,16 @@ class RPMSync:
 
     def snap_repodata(self):
         self.log.info("copy repodata")
-        repomd_dst = "{0}/snap/{1}/{2}/repodata/repomd.xml".format(
-            self.destination, self.reponame, self.date
-        )
-        repomd_src = "{0}/sync/{1}/repodata/repomd.xml".format(
-            self.destination, self.reponame
-        )
+        repomd_dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/repodata/repomd.xml"
+        repomd_src = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         try:
             os.makedirs(os.path.dirname(repomd_dst))
         except OSError:
             pass
         copyfile(repomd_src, repomd_dst)
         for location, hash_algo, hash_sum in self.repomod_files():
-            dst = "{0}/snap/{1}/{2}/{3}".format(
-                self.destination, self.reponame, self.date, location
-            )
-            src = "{0}/sync/{1}/{2}".format(self.destination, self.reponame, location)
+            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+            src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
             except OSError:
@@ -364,20 +330,14 @@ class RPMSync:
     def snap_treeinfo(self):
         self.log.info("copy treeinfo")
         try:
-            dst = "{0}/snap/{1}/{2}/{3}".format(
-                self.destination, self.reponame, self.date, self.treeinfo
-            )
-            src = "{0}/sync/{1}/{2}".format(
-                self.destination, self.reponame, self.treeinfo
-            )
+            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{self.treeinfo}"
+            src = f"{self.destination}/sync/{self.reponame}/{self.treeinfo}"
             copyfile(src, dst)
         except (OSError, FileNotFoundError) as err:
-            self.log.error("could not copy {0}: {1}".format(self.treeinfo, err))
+            self.log.error(f"could not copy {self.treeinfo}: {err}")
         for location, hash_algo, hash_sum in self.treeinfo_files():
-            dst = "{0}/snap/{1}/{2}/{3}".format(
-                self.destination, self.reponame, self.date, location
-            )
-            src = "{0}/sync/{1}/{2}".format(self.destination, self.reponame, location)
+            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+            src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
             except OSError:
@@ -388,10 +348,8 @@ class RPMSync:
     def snap_packages(self):
         self.log.info("copy packages")
         for location, hash_algo, hash_sum in self.packages():
-            dst = "{0}/snap/{1}/{2}/{3}".format(
-                self.destination, self.reponame, self.date, location
-            )
-            src = "{0}/sync/{1}/{2}".format(self.destination, self.syncdir, location)
+            dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
+            src = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
             try:
                 os.makedirs(os.path.dirname(dst))
             except OSError:
@@ -399,7 +357,7 @@ class RPMSync:
             try:
                 os.symlink(src, dst)
             except FileExistsError as err:
-                self.log.error("could not copy {0}: {1}".format(location, err))
+                self.log.error(f"could not copy {location}: {err}")
         self.log.info("done copy packages")
 
     def sync(self):

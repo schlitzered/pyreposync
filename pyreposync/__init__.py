@@ -56,6 +56,14 @@ def main():
     )
     subparsers.required = True
 
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="migrate to new sync format",
+    )
+    migrate_parser.set_defaults(
+        method="migrate",
+    )
+
     snap_cleanup_parser = subparsers.add_parser(
         "snap_cleanup",
         help="remove all unnamed snapshots and unreferenced rpms.",
@@ -259,7 +267,6 @@ class PyRepoSync:
                     ),
                     destination=self.config.get("main", "destination"),
                     reponame=section[:-4].replace(":VERSION:", version),
-                    syncdir=self.config.get(section, "syncdir", fallback=None),
                     date=date,
                     treeinfo=self.config.get(section, "treeinfo", fallback=".treeinfo"),
                     proxy=self.config.get("main", "proxy", fallback=None),
@@ -275,7 +282,6 @@ class PyRepoSync:
                 base_url=self.config.get(section, "baseurl"),
                 destination=self.config.get("main", "destination"),
                 reponame=section[:-4],
-                syncdir=self.config.get(section, "syncdir", fallback=None),
                 date=date,
                 treeinfo=self.config.get(section, "treeinfo", fallback=".treeinfo"),
                 proxy=self.config.get("main", "proxy", fallback=None),
@@ -324,7 +330,7 @@ class PyRepoSync:
         return_code = 0
         for worker in workers:
             worker.join()
-            if worker.status is not 0:
+            if worker.status != 0:
                 return_code = 1
         sys.exit(return_code)
 
@@ -340,7 +346,7 @@ class PyRepoSync:
             else:
                 if tag not in section_tags:
                     return False
-        self.log.info("section {0} has matching tags".format(section))
+        self.log.info(f"section {section} has matching tags")
         return True
 
 
@@ -379,43 +385,48 @@ class RepoSyncThread(threading.Thread):
     def timestamp(self):
         return self._timestamp
 
+    def do_migrate(self, jobs):
+        for job in jobs:
+            try:
+                self.log.info(f"{self.action} start repo {job.reponame}")
+                self.name = job.reponame
+                job.migrate()
+                self.log.info(f"{self.action} done repo {job.reponame}")
+            except OSRepoSyncException:
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
+                self.status = 1
+
     def do_sync(self, jobs):
         for job in jobs:
             try:
-                self.log.info("{0} start repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} start repo {job.reponame}")
                 self.name = job.reponame
                 job.sync()
-                self.log.info("{0} done repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} done repo {job.reponame}")
             except OSRepoSyncException:
-                self.log.fatal(
-                    "could not {0} repo {1}".format(self.action, job.reponame)
-                )
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
                 self.status = 1
 
     def do_snap(self, jobs):
         for job in jobs:
             try:
-                self.log.info("{0} start repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} start repo {job.reponame}")
                 self.name = job.reponame
                 job.snap()
-                self.log.info("{0} done repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} done repo {job.reponame}")
             except OSRepoSyncException:
-                self.log.fatal(
-                    "could not {0} repo {1}".format(self.action, job.reponame)
-                )
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
                 self.status = 1
 
     def do_snap_cleanup(self, jobs):
         for job in jobs:
             try:
-                self.log.info("{0} start repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} start repo {job.reponame}")
                 self.name = job.reponame
                 job.snap_cleanup()
-                self.log.info("{0} done repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} done repo {job.reponame}")
             except OSRepoSyncException:
-                self.log.fatal(
-                    "could not {0} repo {1}".format(self.action, job.reponame)
-                )
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
                 self.status = 1
 
     def do_snap_list(self, jobs):
@@ -423,29 +434,22 @@ class RepoSyncThread(threading.Thread):
             try:
                 self.name = job.reponame
                 referenced_timestamps = job.snap_list_get_referenced_timestamps()
-                self.log.info("Repository: {0}".format(job.reponame))
+                self.log.info(f"Repository: {job.reponame}")
                 self.log.info("The following timestamp snapshots exist:")
                 for timestamp in job.snap_list_timestamp_snapshots():
                     self.log.info(
-                        "{0} -> {1}".format(
-                            timestamp, referenced_timestamps.get(timestamp, [])
-                        )
+                        f"{timestamp} -> {referenced_timestamps.get(timestamp, [])}"
                     )
                 self.log.info("The following named snapshots exist:")
-                base = "{0}/snap/{1}/".format(job.destination, job.reponame)
+                base = f"{job.destination}/snap/{job.reponame}/"
                 for named in job.snap_list_named_snapshots():
-                    named = "named/{0}".format(named)
-                    self.log.info(
-                        "{0} -> {1}".format(
-                            named,
-                            job.snap_list_named_snapshot_target(
-                                "{0}/{1}".format(base, named)
-                            ),
-                        )
+                    timestamp = job.snap_list_named_snapshot_target(
+                        f"{base}/named/{named}"
                     )
-                latest = "{0}/latest".format(base)
+                    self.log.info(f"named/{named} -> {timestamp}")
+                latest = f"{base}/latest"
                 self.log.info(
-                    "latest -> {0}".format(job.snap_list_named_snapshot_target(latest))
+                    f"latest -> {job.snap_list_named_snapshot_target(latest)}"
                 )
 
             except OSRepoSyncException:
@@ -454,27 +458,23 @@ class RepoSyncThread(threading.Thread):
     def do_snap_name(self, jobs):
         for job in jobs:
             try:
-                self.log.info("{0} start repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} start repo {job.reponame}")
                 self.name = job.reponame
                 job.snap_name(self.timestamp, self.snapname)
-                self.log.info("{0} done repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} done repo {job.reponame}")
             except OSRepoSyncException:
-                self.log.fatal(
-                    "could not {0} repo {1}".format(self.action, job.reponame)
-                )
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
                 self.status = 1
 
     def do_snap_unname(self, jobs):
         for job in jobs:
             try:
-                self.log.info("{0} start repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} start repo {job.reponame}")
                 self.name = job.reponame
                 job.snap_unname(self.snapname)
-                self.log.info("{0} done repo {1}".format(self.action, job.reponame))
+                self.log.info(f"{self.action} done repo {job.reponame}")
             except OSRepoSyncException:
-                self.log.fatal(
-                    "could not {0} repo {1}".format(self.action, job.reponame)
-                )
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
                 self.status = 1
 
     def do_validate(self, jobs):
@@ -482,43 +482,47 @@ class RepoSyncThread(threading.Thread):
         packages = dict()
         for job in jobs:
             try:
-                self.log.info("{0} start repo {1}".format(self.action, job.reponame))
-                packages.update(job.revalidate2())
+                self.log.info(f"{self.action} start repo {job.reponame}")
+                packages.update(job.revalidate())
             except OSRepoSyncException:
-                self.log.fatal(
-                    "could not {0} repo {1}".format(self.action, job.reponame)
-                )
+                self.log.fatal(f"could not {self.action} repo {job.reponame}")
                 self.status = 1
         for destination, hash_info in packages.items():
             try:
-                self.log.info("validating: {0}".format(destination))
+                self.log.info(f"validating: {destination}")
                 _downloader.check_hash(
                     destination=destination,
                     checksum=hash_info["hash_sum"],
                     hash_type=hash_info["hash_algo"],
                 )
             except OSRepoSyncHashError:
-                self.log.error("hash mismatch for: {0}".format(destination))
+                self.log.error(f"hash mismatch for: {destination}")
             except FileNotFoundError:
-                self.log.error("file not found: {0}".format(destination))
+                self.log.error(f"file not found: {destination}")
 
     def run(self):
         while True:
             try:
                 jobs = self.queue.pop()
-                if self.action is "sync":
+                if self.action == "migrate":
+                    self.do_migrate(jobs)
+                elif self.action == "sync":
                     self.do_sync(jobs)
-                elif self.action is "snap_cleanup":
+                elif self.action == "snap_cleanup":
                     self.do_snap_cleanup(jobs)
-                elif self.action is "snap_list":
+                elif self.action == "snap_list":
                     self.do_snap_list(jobs)
-                elif self.action is "snap_name":
+                elif self.action == "snap_name":
                     self.do_snap_name(jobs)
-                elif self.action is "snap_unname":
+                elif self.action == "snap_unname":
                     self.do_snap_unname(jobs)
-                elif self.action is "snap":
+                elif self.action == "snap":
                     self.do_snap(jobs)
-                elif self.action is "validate":
+                elif self.action == "validate":
                     self.do_validate(jobs)
             except IndexError:
                 break
+
+
+if __name__ == "__main__":
+    main()
