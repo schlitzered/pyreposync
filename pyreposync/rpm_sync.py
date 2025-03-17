@@ -86,33 +86,41 @@ class RPMSync:
             yield location.get("href"), hash_algo, hash_sum
 
     def migrate(self):
+        migrated_file = f"{self.destination}/sync/{self.reponame}/migrated"
+        if os.path.isfile(migrated_file):
+            self.log.info("migration already done")
+            return
+
         for location, hash_algo, hash_sum in self.packages():
             destination_old = f"{self.destination}/sync/{self.reponame}/{location}"
             destination_new = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
             try:
-                os.remove(destination_new)
                 os.rename(destination_old, destination_new)
-                os.symlink(destination_new, destination_old)
             except FileNotFoundError:
                 self.log.error(f"could not migrate {location}: {destination_old} not found")
                 continue
             except OSError as err:
                 self.log.error(f"could not migrate {location}: {err}")
                 continue
-            self.log.info(f"migrated {location} to {destination_new}")
 
         for snap in self.snap_list_timestamp_snapshots():
             self.log.info(f"migrating {snap}")
             base_path = f"{self.destination}/snap/{self.reponame}/{snap}"
             for location, hash_algo, hash_sum in self.packages(base_path=base_path):
-                dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
+                dst = f"{base_path}/{location}"
                 src = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
                 try:
                     os.unlink(dst)
                     os.symlink(src, dst)
                 except OSError:
                     pass
+                try:
+                    os.symlink(src, dst)
+                except OSError:
+                    pass
 
+        with open(migrated_file, "w") as _migrated:
+            _migrated.write("migrated\n")
 
     def sync_packages(self):
         for location, hash_algo, hash_sum in self.packages():
