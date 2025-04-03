@@ -1,6 +1,7 @@
 .idea
 *__pycache__*
 pyreposync.egg-info
+_data
 dist
 venv
 *xml

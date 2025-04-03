@@ -4,6 +4,7 @@ import os
 import requests
 import requests.exceptions
 import shutil
+import tempfile
 import time
 
 from pyreposync.exceptions import OSRepoSyncDownLoadError, OSRepoSyncHashError
@@ -53,16 +54,16 @@ class Downloader(object):
 
         with open(destination, "rb") as dest:
             hasher.update(dest.read())
-            self.log.debug("expected hash: {0}".format(hasher.hexdigest()))
-            self.log.debug("actual hash: {0}".format(checksum))
+            self.log.debug(f"expected hash: {hasher.hexdigest()}")
+            self.log.debug(f"actual hash: {checksum}")
             if hasher.hexdigest() == checksum:
-                self.log.debug("download valid: {0}".format(destination))
+                self.log.debug(f"download valid: {destination}")
             else:
-                self.log.error("download invalid: {0}".format(destination))
-                raise OSRepoSyncHashError("download invalid: {0}".format(destination))
+                self.log.error(f"download invalid: {destination}")
+                raise OSRepoSyncHashError(f"download invalid: {destination}")
 
     def get(self, url, destination, checksum=None, hash_type=None, replace=False):
-        self.log.info("downloading: {0}".format(url))
+        self.log.info(f"downloading: {url}")
         if not replace:
             if os.path.isfile(destination):
                 self.log.info("already there, not downloading")
@@ -70,8 +71,12 @@ class Downloader(object):
         retries = 10
         while retries >= 0:
             try:
-                self._get(url, destination, checksum, hash_type)
-                self.log.info("done downloading: {0}".format(url))
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    tmp_file = os.path.join(tmp_dir, os.path.basename(destination))
+                    self._get(url, tmp_file, checksum, hash_type)
+                    self.create_dir(destination)
+                    shutil.move(tmp_file, destination)
+                self.log.info(f"done downloading: {url}")
                 return
             except requests.exceptions.ConnectionError:
                 self.log.error("could not fetch resource, retry in 10 seconds")
@@ -83,15 +88,19 @@ class Downloader(object):
                 time.sleep(10)
             except OSRepoSyncDownLoadError:
                 break
-        self.log.error("could not download: {0}".format(url))
-        raise OSRepoSyncDownLoadError("could not download: {0}".format(url))
+        self.log.error(f"could not download: {url}")
+        raise OSRepoSyncDownLoadError(f"could not download: {url}")
 
-    def _get(self, url, destination, checksum=None, hash_type=None):
+    def create_dir(self, destination):
         if not os.path.isdir(os.path.dirname(destination)):
             try:
                 os.makedirs(os.path.dirname(destination))
-            except OSError:
-                pass
+            except OSError as err:
+                self.log.error(f"could not create directory: {err}")
+                raise OSRepoSyncDownLoadError(f"could not create directory: {err}")
+
+    def _get(self, url, destination, checksum=None, hash_type=None):
+        self.create_dir(destination)
         r = requests.get(
             url, stream=True, proxies=self.proxy, cert=self.cert, verify=self.ca_cert
         )
@@ -106,4 +115,4 @@ class Downloader(object):
             self.check_hash(
                 destination=destination, checksum=checksum, hash_type=hash_type
             )
-        self.log.info("successfully fetched: {0}".format(url))
+        self.log.info(f"successfully fetched: {url}")
