@@ -10,7 +10,7 @@ import shutil
 import xml.etree.ElementTree
 
 from pyreposync.downloader import Downloader
-from pyreposync.exceptions import OSRepoSyncException, OSRepoSyncHashError
+from pyreposync.exceptions import OSRepoSyncException
 
 
 class RPMSync:
@@ -60,7 +60,7 @@ class RPMSync:
         if not base_path:
             base_path = f"{self.destination}/sync/{self.reponame}"
         primary = None
-        for location, hash_algo, hash_sum in self.repomod_files(base_path=base_path):
+        for location, hash_algo, hash_sum in self.repomd_files():
             destination = f"{base_path}/{location}"
             if "primary.xml" in destination.lower():
                 primary = destination
@@ -97,7 +97,9 @@ class RPMSync:
             try:
                 os.rename(destination_old, destination_new)
             except FileNotFoundError:
-                self.log.error(f"could not migrate {location}: {destination_old} not found")
+                self.log.error(
+                    f"could not migrate {location}: {destination_old} not found"
+                )
                 continue
             except OSError as err:
                 self.log.error(f"could not migrate {location}: {err}")
@@ -165,8 +167,8 @@ class RPMSync:
             destination = f"{self.destination}/sync/{self.reponame}/{file}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
 
-    def repomod_files(self, base_path):
-        base_path = f"{base_path}/repodata/repomd.xml"
+    def repomd_files(self):
+        base_path = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         repomd = xml.etree.ElementTree.parse(base_path).getroot()
         datas = repomd.findall("{http://linux.duke.edu/metadata/repo}data")
         for data in datas:
@@ -186,7 +188,7 @@ class RPMSync:
             self.log.error("no repodata found")
         return packages
 
-    def sync_repomod(self):
+    def sync_repomd(self):
         url = f"{self.base_url}repodata/repomd.xml"
         destination = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         try:
@@ -194,7 +196,7 @@ class RPMSync:
         except FileNotFoundError:
             pass
         self.downloader.get(url, destination, replace=True)
-        for location, hash_algo, hash_sum in self.repomod_files():
+        for location, hash_algo, hash_sum in self.repomd_files():
             url = f"{self.base_url}{location}"
             destination = f"{self.destination}/sync/{self.reponame}/{location}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
@@ -318,15 +320,17 @@ class RPMSync:
 
     def snap_repodata(self):
         self.log.info("copy repodata")
-        repomd_dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/repodata/repomd.xml"
+        repomd_dst = (
+            f"{self.destination}/snap/{self.reponame}/{self.date}/repodata/repomd.xml"
+        )
         repomd_src = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         try:
             os.makedirs(os.path.dirname(repomd_dst))
         except OSError:
             pass
         copyfile(repomd_src, repomd_dst)
-        for location, hash_algo, hash_sum in self.repomod_files():
-            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+        for location, hash_algo, hash_sum in self.repomd_files():
+            dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
             src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
@@ -344,7 +348,9 @@ class RPMSync:
         except (OSError, FileNotFoundError) as err:
             self.log.error(f"could not copy {self.treeinfo}: {err}")
         for location, hash_algo, hash_sum in self.treeinfo_files():
-            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+            dst = (
+                f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+            )
             src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
@@ -370,5 +376,5 @@ class RPMSync:
 
     def sync(self):
         self.log.info("starting thread")
-        self.sync_repomod()
+        self.sync_repomd()
         self.log.info("shutdown thread complete")
