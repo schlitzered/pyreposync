@@ -70,7 +70,78 @@ class DEBSync:
 
     def snap(self):
         self.log.info("creating snapshot")
+        for suite in self.suites:
+            self.snap_suites(suite=suite)
+        current = f"{self.destination}/snap/{self.reponame}/{self.date}"
+        latest = f"{self.destination}/snap/{self.reponame}/latest"
+        timestamp = f"{self.destination}/snap/{self.reponame}/{self.date}/timestamp"
+        self.log.info("setting latest to current release")
+        try:
+            os.unlink(latest)
+        except FileNotFoundError:
+            pass
+        os.symlink(current, latest)
+        with open(timestamp, "w") as _timestamp:
+            _timestamp.write(f"{self.destination}\n")
         self.log.info("done creating snapshot")
+
+    def snap_suites(self, suite):
+        self.log.info(f"creating snapshot for suite {suite}")
+        self.snap_release(suite=suite)
+        self.snap_release_files(suite=suite)
+        for arch in self.binary_archs:
+            self.snap_package_binary_files(suite=suite, arch=arch)
+        self.log.info(f"creating snapshot for suite {suite}, done")
+
+    def snap_release(self, suite):
+        self.log.info(f"creating snapshot for suite {suite} release files")
+        release_files = ["InRelease", "Release", "Release.gpg"]
+        src_path = f"{self.destination}/sync/{self.reponame}/dists/{suite}"
+        dst_path = f"{self.destination}/snap/{self.reponame}/{self.date}/dists/{suite}"
+        try:
+            os.makedirs(dst_path)
+        except OSError:
+            pass
+        for release_file in release_files:
+            src = f"{src_path}/{release_file}"
+            dst = f"{dst_path}/{release_file}"
+            copyfile(src, dst)
+        self.log.info(f"creating snapshot for suite {suite} release files, done")
+
+    def snap_release_files(self, suite):
+        self.log.info(f"creating snapshot for suite {suite} release files")
+        release_files = self.release_files_sha256(suite=suite)
+        src_path = f"{self.destination}/sync/{self.reponame}/dists/{suite}"
+        dst_path = f"{self.destination}/snap/{self.reponame}/{self.date}/dists/{suite}"
+        for filename, sha256_dict in release_files.items():
+            src = f"{src_path}/{filename}"
+            dst = f"{dst_path}/{filename}"
+            try:
+                os.makedirs(os.path.dirname(dst))
+            except OSError:
+                pass
+            try:
+                copyfile(src, dst)
+            except FileNotFoundError:
+                pass
+        self.log.info(f"creating snapshot for suite {suite} release files, done")
+
+    def snap_package_binary_files(self, suite, arch):
+        self.log.info(f"creating snapshot for suite {suite} arch {arch} package binary files")
+        packages = self.binary_files_sha256(suite=suite, component="main", arch=arch)
+        src_path = f"{self.destination}/sync/{self.reponame}"
+        dst_path = f"{self.destination}/snap/{self.reponame}/{self.date}"
+        for filename, sha256_dict in packages.items():
+            src = f"{src_path}/{filename}.sha256.{sha256_dict['sha256']}"
+            dst = f"{dst_path}/{filename}"
+            try:
+                os.makedirs(os.path.dirname(dst))
+            except OSError:
+                pass
+            try:
+                os.symlink(src, dst)
+            except FileExistsError:
+                pass
 
     def snap_name(self, timestamp, snapname):
         self.log.info("creating named snapshot")
@@ -88,8 +159,8 @@ class DEBSync:
 
     def sync_suites(self, suite):
         self.log.info(f"syncing suite {suite}")
-        #self.sync_release(suite=suite)
-        #self.sync_release_files(suite=suite)
+        self.sync_release(suite=suite)
+        self.sync_release_files(suite=suite)
         for arch in self.binary_archs:
             self.sync_package_binary_files(suite=suite, arch=arch)
         self.log.info(f"syncing suite {suite}, done")
