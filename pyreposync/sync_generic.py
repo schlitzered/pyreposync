@@ -1,13 +1,6 @@
-from shutil import copyfile
-
-import bz2
-import gzip
-import configparser
 import logging
 import os
 import shutil
-
-import xml.etree.ElementTree
 
 from pyreposync.downloader import Downloader
 from pyreposync.exceptions import OSRepoSyncException
