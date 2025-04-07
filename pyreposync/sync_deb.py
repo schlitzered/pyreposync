@@ -1,16 +1,12 @@
 from shutil import copyfile
 
-import bz2
 import gzip
-import logging
 import os
-import shutil
 
-from pyreposync.downloader import Downloader
-from pyreposync.exceptions import OSRepoSyncException, OSRepoSyncHashError
+from pyreposync.sync_generic import SyncGeneric
 
 
-class DEBSync:
+class SyncDeb(SyncGeneric):
     def __init__(
         self,
         base_url,
@@ -25,37 +21,24 @@ class DEBSync:
         client_key=None,
         ca_cert=None,
     ):
-        self._binary_archs = binary_archs
-        self._base_url = base_url
-        self._components = components
-        self._date = date
-        self._destination = destination
-        self._reponame = reponame
-        self._suites = suites
-        self.downloader = Downloader(
-            proxy=proxy, client_cert=client_cert, client_key=client_key, ca_cert=ca_cert
+        super().__init__(
+            base_url,
+            destination,
+            reponame,
+            date,
+            proxy,
+            client_cert,
+            client_key,
+            ca_cert,
         )
-        self.log = logging.getLogger("application")
+        self._binary_archs = binary_archs
+        self._components = components
+        self._destination = destination
+        self._suites = suites
 
     @property
     def binary_archs(self) -> list[str]:
         return self._binary_archs
-
-    @property
-    def base_url(self):
-        return self._base_url
-
-    @property
-    def date(self):
-        return self._date
-
-    @property
-    def destination(self):
-        return self._destination
-
-    @property
-    def reponame(self):
-        return self._reponame
 
     @property
     def suites(self) -> list[str]:
@@ -65,25 +48,9 @@ class DEBSync:
     def components(self) -> list[str]:
         return self._components
 
-    def migrate(self):
-        pass
-
-    def snap(self):
-        self.log.info("creating snapshot")
+    def _snap(self):
         for suite in self.suites:
             self.snap_suites(suite=suite)
-        current = f"{self.destination}/snap/{self.reponame}/{self.date}"
-        latest = f"{self.destination}/snap/{self.reponame}/latest"
-        timestamp = f"{self.destination}/snap/{self.reponame}/{self.date}/timestamp"
-        self.log.info("setting latest to current release")
-        try:
-            os.unlink(latest)
-        except FileNotFoundError:
-            pass
-        os.symlink(current, latest)
-        with open(timestamp, "w") as _timestamp:
-            _timestamp.write(f"{self.destination}\n")
-        self.log.info("done creating snapshot")
 
     def snap_suites(self, suite):
         self.log.info(f"creating snapshot for suite {suite}")
@@ -127,7 +94,9 @@ class DEBSync:
         self.log.info(f"creating snapshot for suite {suite} release files, done")
 
     def snap_package_binary_files(self, suite, arch):
-        self.log.info(f"creating snapshot for suite {suite} arch {arch} package binary files")
+        self.log.info(
+            f"creating snapshot for suite {suite} arch {arch} package binary files"
+        )
         packages = self.binary_files_sha256(suite=suite, component="main", arch=arch)
         src_path = f"{self.destination}/sync/{self.reponame}"
         dst_path = f"{self.destination}/snap/{self.reponame}/{self.date}"
@@ -142,14 +111,6 @@ class DEBSync:
                 os.symlink(src, dst)
             except FileExistsError:
                 pass
-
-    def snap_name(self, timestamp, snapname):
-        self.log.info("creating named snapshot")
-        self.log.info("done creating named snapshot")
-
-    def snap_unname(self, snapname):
-        self.log.info("removing named snapshot")
-        self.log.info("done removing named snapshot")
 
     def sync(self):
         self.log.info("starting thread")

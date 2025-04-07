@@ -9,8 +9,8 @@ import time
 
 from pyreposync.downloader import Downloader
 from pyreposync.exceptions import OSRepoSyncException, OSRepoSyncHashError
-from pyreposync.rpm_sync import RPMSync
-from pyreposync.deb_sync import DEBSync
+from pyreposync.sync_rpm import SyncRPM
+from pyreposync.sync_deb import SyncDeb
 
 
 def main():
@@ -260,7 +260,7 @@ class PyRepoSync:
     def get_job(self, date, section):
         self.log.info(f"section name: {section}")
         if section.endswith(":rpm"):
-            return RPMSync(
+            return SyncRPM(
                 base_url=self.config.get(section, "baseurl"),
                 destination=self.config.get("main", "destination"),
                 reponame=section[:-4],
@@ -272,7 +272,7 @@ class PyRepoSync:
                 ca_cert=self.config.get(section, "sslcacert", fallback=None),
             )
         elif section.endswith(":deb"):
-            return DEBSync(
+            return SyncDeb(
                 base_url=self.config.get(section, "baseurl"),
                 destination=self.config.get("main", "destination"),
                 reponame=section[:-4],
