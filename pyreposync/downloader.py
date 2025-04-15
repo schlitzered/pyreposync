@@ -62,7 +62,15 @@ class Downloader(object):
                 self.log.error(f"download invalid: {destination}")
                 raise OSRepoSyncHashError(f"download invalid: {destination}")
 
-    def get(self, url, destination, checksum=None, hash_type=None, replace=False):
+    def get(
+        self,
+        url,
+        destination,
+        checksum=None,
+        hash_type=None,
+        replace=False,
+        not_found_ok=False,
+    ):
         self.log.info(f"downloading: {url}")
         if not replace:
             if os.path.isfile(destination):
@@ -73,9 +81,15 @@ class Downloader(object):
             try:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     tmp_file = os.path.join(tmp_dir, os.path.basename(destination))
-                    self._get(url, tmp_file, checksum, hash_type)
+                    self._get(url, tmp_file, checksum, hash_type, not_found_ok)
                     self.create_dir(destination)
-                    shutil.move(tmp_file, destination)
+                    try:
+                        shutil.move(tmp_file, destination)
+                    except OSError:
+                        if not_found_ok:
+                            pass
+                        else:
+                            raise
                 self.log.info(f"done downloading: {url}")
                 return
             except requests.exceptions.ConnectionError:
@@ -99,7 +113,14 @@ class Downloader(object):
                 self.log.error(f"could not create directory: {err}")
                 raise OSRepoSyncDownLoadError(f"could not create directory: {err}")
 
-    def _get(self, url, destination, checksum=None, hash_type=None):
+    def _get(
+        self,
+        url,
+        destination,
+        checksum=None,
+        hash_type=None,
+        not_found_ok=False,
+    ):
         self.create_dir(destination)
         r = requests.get(
             url, stream=True, proxies=self.proxy, cert=self.cert, verify=self.ca_cert
@@ -110,6 +131,10 @@ class Downloader(object):
                 shutil.copyfileobj(r.raw, dst)
                 dst.flush()
         else:
+            if not_found_ok:
+                if r.status_code == 404:
+                    self.log.info("not found, skipping")
+                    return
             raise OSRepoSyncDownLoadError()
         if checksum:
             self.check_hash(

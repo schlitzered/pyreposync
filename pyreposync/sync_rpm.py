@@ -3,17 +3,17 @@ from shutil import copyfile
 import bz2
 import gzip
 import configparser
-import logging
 import os
 import shutil
 
 import xml.etree.ElementTree
 
-from pyreposync.downloader import Downloader
-from pyreposync.exceptions import OSRepoSyncException, OSRepoSyncHashError
+from pyreposync.sync_generic import SyncGeneric
+
+from pyreposync.exceptions import OSRepoSyncException
 
 
-class RPMSync:
+class SyncRPM(SyncGeneric):
     def __init__(
         self,
         base_url,
@@ -26,31 +26,17 @@ class RPMSync:
         client_key=None,
         ca_cert=None,
     ):
-        self._base_url = base_url
-        self._date = date
-        self._destination = destination
-        self._reponame = reponame
-        self._treeinfo = treeinfo
-        self.downloader = Downloader(
-            proxy=proxy, client_cert=client_cert, client_key=client_key, ca_cert=ca_cert
+        super().__init__(
+            base_url,
+            destination,
+            reponame,
+            date,
+            proxy,
+            client_cert,
+            client_key,
+            ca_cert,
         )
-        self.log = logging.getLogger("application")
-
-    @property
-    def base_url(self):
-        return self._base_url
-
-    @property
-    def date(self):
-        return self._date
-
-    @property
-    def destination(self):
-        return self._destination
-
-    @property
-    def reponame(self):
-        return self._reponame
+        self._treeinfo = treeinfo
 
     @property
     def treeinfo(self):
@@ -60,7 +46,7 @@ class RPMSync:
         if not base_path:
             base_path = f"{self.destination}/sync/{self.reponame}"
         primary = None
-        for location, hash_algo, hash_sum in self.repomod_files(base_path=base_path):
+        for location, hash_algo, hash_sum in self.repomd_files():
             destination = f"{base_path}/{location}"
             if "primary.xml" in destination.lower():
                 primary = destination
@@ -97,7 +83,9 @@ class RPMSync:
             try:
                 os.rename(destination_old, destination_new)
             except FileNotFoundError:
-                self.log.error(f"could not migrate {location}: {destination_old} not found")
+                self.log.error(
+                    f"could not migrate {location}: {destination_old} not found"
+                )
                 continue
             except OSError as err:
                 self.log.error(f"could not migrate {location}: {err}")
@@ -165,8 +153,8 @@ class RPMSync:
             destination = f"{self.destination}/sync/{self.reponame}/{file}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
 
-    def repomod_files(self, base_path):
-        base_path = f"{base_path}/repodata/repomd.xml"
+    def repomd_files(self):
+        base_path = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         repomd = xml.etree.ElementTree.parse(base_path).getroot()
         datas = repomd.findall("{http://linux.duke.edu/metadata/repo}data")
         for data in datas:
@@ -186,7 +174,7 @@ class RPMSync:
             self.log.error("no repodata found")
         return packages
 
-    def sync_repomod(self):
+    def sync_repomd(self):
         url = f"{self.base_url}repodata/repomd.xml"
         destination = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         try:
@@ -194,139 +182,31 @@ class RPMSync:
         except FileNotFoundError:
             pass
         self.downloader.get(url, destination, replace=True)
-        for location, hash_algo, hash_sum in self.repomod_files():
+        for location, hash_algo, hash_sum in self.repomd_files():
             url = f"{self.base_url}{location}"
             destination = f"{self.destination}/sync/{self.reponame}/{location}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
         self.sync_packages()
         self.sync_treeinfo()
 
-    def snap(self):
-        self.log.info("creating snapshot")
+    def _snap(self):
         self.snap_repodata()
         self.snap_treeinfo()
         self.snap_packages()
-        current = f"{self.destination}/snap/{self.reponame}/{self.date}"
-        latest = f"{self.destination}/snap/{self.reponame}/latest"
-        timestamp = f"{self.destination}/snap/{self.reponame}/{self.date}/timestamp"
-        self.log.info("setting latest to current release")
-        try:
-            os.unlink(latest)
-        except FileNotFoundError:
-            pass
-        os.symlink(current, latest)
-        with open(timestamp, "w") as _timestamp:
-            _timestamp.write(f"{self.destination}\n")
-        self.log.info("done creating snapshot")
-
-    def snap_cleanup(self):
-        referenced_timestamps = self.snap_list_get_referenced_timestamps()
-        for snap in self.snap_list_timestamp_snapshots():
-            if snap not in referenced_timestamps:
-                snap = f"{self.destination}/snap/{self.reponame}/{snap}"
-                shutil.rmtree(snap)
-
-    def snap_list_get_referenced_timestamps(self):
-        result = dict()
-        base = f"{self.destination}/snap/{self.reponame}/"
-        for candidate in self.snap_list_named_snapshots():
-            candidate = f"named/{candidate}"
-            timestamp = self.snap_list_named_snapshot_target(f"{base}/{candidate}")
-            if timestamp not in result:
-                result[timestamp] = [candidate]
-            else:
-                result[timestamp].append(candidate)
-        timestamp = self.snap_list_named_snapshot_target(f"{base}/latest")
-        if timestamp not in result:
-            result[timestamp] = ["latest"]
-        else:
-            result[timestamp].append("latest")
-        return result
-
-    def snap_list_named_snapshots(self):
-        try:
-            return os.listdir(f"{self.destination}/snap/{self.reponame}/named")
-        except FileNotFoundError:
-            return []
-
-    @staticmethod
-    def snap_list_named_snapshot_target(path):
-        try:
-            return os.readlink(path).split("/")[-1]
-        except FileNotFoundError:
-            return None
-
-    def snap_list_timestamp_snapshots(self):
-        try:
-            result = os.listdir(f"{self.destination}/snap/{self.reponame}/")
-            try:
-                result.remove("latest")
-            except ValueError:
-                pass
-            try:
-                result.remove("named")
-            except ValueError:
-                pass
-            return result
-        except FileNotFoundError:
-            return []
-
-    def snap_name(self, timestamp, snapname):
-        self.log.info("creating named snapshot")
-        try:
-            int(timestamp)
-            if not len(timestamp) == 14:
-                raise ValueError
-        except ValueError:
-            self.log.error(
-                f"{timestamp} is not a valid timestamp, checking if its a named snapshot"
-            )
-            source = f"{self.destination}/snap/{self.reponame}/{timestamp}"
-            _timestamp = self.snap_list_named_snapshot_target(source)
-            if _timestamp:
-                self.log.info(f"setting timestamp to {_timestamp}")
-                timestamp = _timestamp
-            else:
-                raise OSRepoSyncException(f"{snapname} is not a valid named snapshot")
-        source = f"{self.destination}/snap/{self.reponame}/{timestamp}"
-        target = f"{self.destination}/snap/{self.reponame}/named/{snapname}"
-        target_dir = f"{self.destination}/snap/{self.reponame}/named/"
-        if os.path.isdir(source):
-            self.log.debug(f"source directory exists: {source}")
-        else:
-            self.log.debug(f"source directory missing: {source}")
-            raise OSRepoSyncException(f"Source directory missing: {source}")
-        try:
-            os.makedirs(os.path.dirname(target_dir))
-        except OSError:
-            pass
-        try:
-            os.unlink(target)
-        except OSError:
-            pass
-        os.symlink(source, target)
-        self.log.info("done creating named snapshot")
-
-    def snap_unname(self, snapname):
-        self.log.info("removing named snapshot")
-        target = f"{self.destination}/snap/{self.reponame}/named/{snapname}"
-        try:
-            os.unlink(target)
-        except FileNotFoundError:
-            pass
-        self.log.info("done removing named snapshot")
 
     def snap_repodata(self):
         self.log.info("copy repodata")
-        repomd_dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/repodata/repomd.xml"
+        repomd_dst = (
+            f"{self.destination}/snap/{self.reponame}/{self.date}/repodata/repomd.xml"
+        )
         repomd_src = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
         try:
             os.makedirs(os.path.dirname(repomd_dst))
         except OSError:
             pass
         copyfile(repomd_src, repomd_dst)
-        for location, hash_algo, hash_sum in self.repomod_files():
-            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+        for location, hash_algo, hash_sum in self.repomd_files():
+            dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
             src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
@@ -344,7 +224,9 @@ class RPMSync:
         except (OSError, FileNotFoundError) as err:
             self.log.error(f"could not copy {self.treeinfo}: {err}")
         for location, hash_algo, hash_sum in self.treeinfo_files():
-            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+            dst = (
+                f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+            )
             src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
@@ -370,5 +252,5 @@ class RPMSync:
 
     def sync(self):
         self.log.info("starting thread")
-        self.sync_repomod()
+        self.sync_repomd()
         self.log.info("shutdown thread complete")
