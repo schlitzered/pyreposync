@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyreposync"
-version = "0.2.0"
-requires-python = ">=3.9"
+version = "0.2.1"
+requires-python = ">=3.6"
 authors = [
   {name = "Stephan.Schultchen", email = "sschultchen@gmail.com"},
 ]

@@ -46,7 +46,7 @@ class SyncRPM(SyncGeneric):
         if not base_path:
             base_path = f"{self.destination}/sync/{self.reponame}"
         primary = None
-        for location, hash_algo, hash_sum in self.repomd_files():
+        for location, hash_algo, hash_sum in self.repomd_files(base_path=base_path):
             destination = f"{base_path}/{location}"
             if "primary.xml" in destination.lower():
                 primary = destination
@@ -153,8 +153,10 @@ class SyncRPM(SyncGeneric):
             destination = f"{self.destination}/sync/{self.reponame}/{file}"
             self.downloader.get(url, destination, hash_sum, hash_algo, replace=True)
 
-    def repomd_files(self):
-        base_path = f"{self.destination}/sync/{self.reponame}/repodata/repomd.xml"
+    def repomd_files(self, base_path=None):
+        if not base_path:
+            base_path = f"{self.destination}/sync/{self.reponame}"
+        base_path = f"{base_path}/repodata/repomd.xml"
         repomd = xml.etree.ElementTree.parse(base_path).getroot()
         datas = repomd.findall("{http://linux.duke.edu/metadata/repo}data")
         for data in datas:
