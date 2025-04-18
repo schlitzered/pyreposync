@@ -265,6 +265,9 @@ class PyRepoSync:
                 destination=self.config.get("main", "destination"),
                 reponame=section[:-4],
                 date=date,
+                allow_missing_packages=self.config.getboolean(
+                    section, "allow_missing_packages", fallback=False
+                ),
                 treeinfo=self.config.get(section, "treeinfo", fallback=".treeinfo"),
                 proxy=self.config.get("main", "proxy", fallback=None),
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
@@ -277,6 +280,9 @@ class PyRepoSync:
                 destination=self.config.get("main", "destination"),
                 reponame=section[:-4],
                 date=date,
+                allow_missing_packages=self.config.getboolean(
+                    section, "allow_missing_packages", fallback=False
+                ),
                 proxy=self.config.get(section, "proxy", fallback=None),
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
                 client_key=self.config.get(section, "sslclientkey", fallback=None),

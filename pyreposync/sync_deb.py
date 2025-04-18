@@ -16,20 +16,22 @@ class SyncDeb(SyncGeneric):
         suites,
         components,
         binary_archs,
+        allow_missing_packages,
         proxy=None,
         client_cert=None,
         client_key=None,
         ca_cert=None,
     ):
         super().__init__(
-            base_url,
-            destination,
-            reponame,
-            date,
-            proxy,
-            client_cert,
-            client_key,
-            ca_cert,
+            base_url=base_url,
+            destination=destination,
+            reponame=reponame,
+            date=date,
+            allow_missing_packages=allow_missing_packages,
+            proxy=proxy,
+            client_cert=client_cert,
+            client_key=client_key,
+            ca_cert=ca_cert,
         )
         self._binary_archs = binary_archs
         self._components = components

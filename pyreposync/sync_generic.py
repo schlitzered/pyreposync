@@ -13,11 +13,13 @@ class SyncGeneric:
         destination,
         reponame,
         date,
+        allow_missing_packages,
         proxy=None,
         client_cert=None,
         client_key=None,
         ca_cert=None,
     ):
+        self._allow_missing_packages = allow_missing_packages
         self._base_url = base_url
         self._date = date
         self._destination = destination
@@ -26,6 +28,10 @@ class SyncGeneric:
             proxy=proxy, client_cert=client_cert, client_key=client_key, ca_cert=ca_cert
         )
         self.log = logging.getLogger("application")
+
+    @property
+    def allow_missing_packages(self):
+        return self._allow_missing_packages
 
     @property
     def base_url(self):

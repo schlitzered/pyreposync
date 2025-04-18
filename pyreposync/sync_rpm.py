@@ -11,6 +11,7 @@ import xml.etree.ElementTree
 from pyreposync.sync_generic import SyncGeneric
 
 from pyreposync.exceptions import OSRepoSyncException
+from pyreposync.exceptions import OSRepoSyncDownLoadError
 
 
 class SyncRPM(SyncGeneric):
@@ -21,20 +22,22 @@ class SyncRPM(SyncGeneric):
         reponame,
         date,
         treeinfo,
+        allow_missing_packages,
         proxy=None,
         client_cert=None,
         client_key=None,
         ca_cert=None,
     ):
         super().__init__(
-            base_url,
-            destination,
-            reponame,
-            date,
-            proxy,
-            client_cert,
-            client_key,
-            ca_cert,
+            base_url=base_url,
+            destination=destination,
+            reponame=reponame,
+            date=date,
+            allow_missing_packages=allow_missing_packages,
+            proxy=proxy,
+            client_cert=client_cert,
+            client_key=client_key,
+            ca_cert=ca_cert,
         )
         self._treeinfo = treeinfo
 
@@ -86,15 +89,24 @@ class SyncRPM(SyncGeneric):
                 self.log.error(
                     f"could not migrate {location}: {destination_old} not found"
                 )
-                continue
             except OSError as err:
                 self.log.error(f"could not migrate {location}: {err}")
-                continue
 
         for snap in self.snap_list_timestamp_snapshots():
             self.log.info(f"migrating {snap}")
             base_path = f"{self.destination}/snap/{self.reponame}/{snap}"
             for location, hash_algo, hash_sum in self.packages(base_path=base_path):
+                destination_old = f"{self.destination}/sync/{self.reponame}/{location}"
+                destination_new = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
+                try:
+                    os.rename(destination_old, destination_new)
+                except FileNotFoundError:
+                    self.log.error(
+                        f"could not migrate {location}: {destination_old} not found"
+                    )
+                except OSError as err:
+                    self.log.error(f"could not migrate {location}: {err}")
+
                 dst = f"{base_path}/{location}"
                 src = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
                 try:
@@ -114,7 +126,15 @@ class SyncRPM(SyncGeneric):
         for location, hash_algo, hash_sum in self.packages():
             url = f"{self.base_url}{location}"
             destination = f"{self.destination}/sync/{self.reponame}/{location}.{hash_algo}.{hash_sum}"
-            self.downloader.get(url, destination, hash_sum, hash_algo, replace=False)
+            try:
+                self.downloader.get(
+                    url, destination, hash_sum, hash_algo, replace=False
+                )
+            except OSRepoSyncDownLoadError:
+                if self.allow_missing_packages:
+                    pass
+                else:
+                    raise
 
     def treeinfo_files(self):
         treeinfo_file = f"{self.destination}/sync/{self.reponame}/{self.treeinfo}"
