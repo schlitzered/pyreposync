@@ -9,7 +9,7 @@ requires-python = ">=3.9"
 authors = [
   {name = "Stephan.Schultchen", email = "sschultchen@gmail.com"},
 ]
-description = "Orbit Api"
+description = "rpm and deb822 repository sync tool"
 dynamic = ["dependencies"]
 license = {file = "LICENSE.txt"}
 keywords = []
