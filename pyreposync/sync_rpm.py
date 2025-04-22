@@ -65,7 +65,11 @@ class SyncRPM(SyncGeneric):
                 root = xml.etree.ElementTree.parse(source).getroot()
         else:
             with open(primary, "rb") as source:
-                root = xml.etree.ElementTree.parse(source).getroot()
+                try:
+                    root = xml.etree.ElementTree.parse(source).getroot()
+                except xml.etree.ElementTree.ParseError as err:
+                    self.log.fatal(f"could not parse {primary}: {err}")
+                    raise OSRepoSyncException(f"could not parse {primary}: {err}")
         packages = root.findall("{http://linux.duke.edu/metadata/common}package")
         for package in packages:
             checksum = package.find("{http://linux.duke.edu/metadata/common}checksum")
