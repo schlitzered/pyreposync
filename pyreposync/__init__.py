@@ -10,7 +10,7 @@ import time
 from pyreposync.downloader import Downloader
 from pyreposync.exceptions import OSRepoSyncException, OSRepoSyncHashError
 from pyreposync.sync_rpm import SyncRPM
-from pyreposync.sync_deb import SyncDeb
+from pyreposync.sync_deb822 import SyncDeb822
 
 
 def main():
@@ -274,11 +274,11 @@ class PyRepoSync:
                 client_key=self.config.get(section, "sslclientkey", fallback=None),
                 ca_cert=self.config.get(section, "sslcacert", fallback=None),
             )
-        elif section.endswith(":deb"):
-            return SyncDeb(
+        elif section.endswith(":deb822"):
+            return SyncDeb822(
                 base_url=self.config.get(section, "baseurl"),
                 destination=self.config.get("main", "destination"),
-                reponame=section[:-4],
+                reponame=section[:-7],
                 date=date,
                 allow_missing_packages=self.config.getboolean(
                     section, "allow_missing_packages", fallback=False
@@ -295,7 +295,7 @@ class PyRepoSync:
     def get_sections(self):
         sections = set()
         for section in self.config:
-            if section.endswith(":rpm") or section.endswith(":deb"):
+            if section.endswith(":rpm") or section.endswith(":deb822"):
                 if self.repo and section != self.repo:
                     continue
                 if self._tags:

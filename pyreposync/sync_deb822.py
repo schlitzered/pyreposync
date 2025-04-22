@@ -6,7 +6,7 @@ import os
 from pyreposync.sync_generic import SyncGeneric
 
 
-class SyncDeb(SyncGeneric):
+class SyncDeb822(SyncGeneric):
     def __init__(
         self,
         base_url,
