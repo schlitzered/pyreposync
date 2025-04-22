@@ -2,6 +2,7 @@ from shutil import copyfile
 
 import bz2
 import gzip
+import lzma
 import configparser
 import os
 import shutil
@@ -57,19 +58,22 @@ class SyncRPM(SyncGeneric):
             self.log.fatal("no primary.xml found in repomd.xml")
             raise OSRepoSyncException("no primary.xml found in repomd.xml")
 
-        if primary.endswith(".gz"):
-            with gzip.open(primary, "rb") as source:
-                root = xml.etree.ElementTree.parse(source).getroot()
-        elif primary.endswith("bz2"):
-            with bz2.open(primary, "rb") as source:
-                root = xml.etree.ElementTree.parse(source).getroot()
-        else:
-            with open(primary, "rb") as source:
-                try:
+        try:
+            if primary.endswith(".gz"):
+                with gzip.open(primary, "rb") as source:
                     root = xml.etree.ElementTree.parse(source).getroot()
-                except xml.etree.ElementTree.ParseError as err:
-                    self.log.fatal(f"could not parse {primary}: {err}")
-                    raise OSRepoSyncException(f"could not parse {primary}: {err}")
+            elif primary.endswith(".bz2"):
+                with bz2.open(primary, "rb") as source:
+                    root = xml.etree.ElementTree.parse(source).getroot()
+            elif primary.endswith(".xz"):
+                with lzma.open(primary, "rb") as source:
+                    root = xml.etree.ElementTree.parse(source).getroot()
+            else:
+                with open(primary, "rb") as source:
+                    root = xml.etree.ElementTree.parse(source).getroot()
+        except xml.etree.ElementTree.ParseError as err:
+            self.log.fatal(f"could not parse {primary}: {err}")
+            raise OSRepoSyncException(f"could not parse {primary}: {err}")
         packages = root.findall("{http://linux.duke.edu/metadata/common}package")
         for package in packages:
             checksum = package.find("{http://linux.duke.edu/metadata/common}checksum")
