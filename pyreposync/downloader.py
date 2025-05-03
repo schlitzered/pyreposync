@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import requests
+import requests.auth
 import requests.exceptions
 import shutil
 import tempfile
@@ -11,8 +12,22 @@ from pyreposync.exceptions import OSRepoSyncDownLoadError, OSRepoSyncHashError
 
 
 class Downloader(object):
-    def __init__(self, proxy=None, client_cert=None, client_key=None, ca_cert=None):
+    def __init__(
+        self,
+        basic_auth_user=None,
+        basic_auth_pass=None,
+        proxy=None,
+        client_cert=None,
+        client_key=None,
+        ca_cert=None,
+    ):
         self.log = logging.getLogger("application")
+        if basic_auth_user and basic_auth_pass:
+            self._basic_auth = requests.auth.HTTPBasicAuth(
+                basic_auth_user, basic_auth_pass
+            )
+        else:
+            self._basic_auth = None
         if proxy:
             self._proxy = {"http": proxy, "https": proxy}
         else:
@@ -25,6 +40,10 @@ class Downloader(object):
             self._ca_cert = ca_cert
         else:
             self._ca_cert = True
+
+    @property
+    def basic_auth(self):
+        return self._basic_auth
 
     @property
     def ca_cert(self):
@@ -123,7 +142,12 @@ class Downloader(object):
     ):
         self.create_dir(destination)
         r = requests.get(
-            url, stream=True, proxies=self.proxy, cert=self.cert, verify=self.ca_cert
+            url,
+            auth=self.basic_auth,
+            stream=True,
+            proxies=self.proxy,
+            cert=self.cert,
+            verify=self.ca_cert,
         )
         if r.status_code == 200:
             with open(destination, "wb", 0) as dst:
