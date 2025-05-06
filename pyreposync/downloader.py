@@ -23,9 +23,7 @@ class Downloader(object):
     ):
         self.log = logging.getLogger("application")
         if basic_auth_user and basic_auth_pass:
-            self._basic_auth = requests.auth.HTTPBasicAuth(
-                basic_auth_user, basic_auth_pass
-            )
+            self._basic_auth = (basic_auth_user, basic_auth_pass)
         else:
             self._basic_auth = None
         if proxy:
