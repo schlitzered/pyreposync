@@ -269,6 +269,12 @@ class PyRepoSync:
                     section, "allow_missing_packages", fallback=False
                 ),
                 treeinfo=self.config.get(section, "treeinfo", fallback=".treeinfo"),
+                basic_auth_user=self.config.get(
+                    section, "basic_auth_user", fallback=None
+                ),
+                basic_auth_pass=self.config.get(
+                    section, "basic_auth_pass", fallback=None
+                ),
                 proxy=self.config.get("main", "proxy", fallback=None),
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
                 client_key=self.config.get(section, "sslclientkey", fallback=None),
@@ -283,6 +289,12 @@ class PyRepoSync:
                 allow_missing_packages=self.config.getboolean(
                     section, "allow_missing_packages", fallback=False
                 ),
+                basic_auth_user=self.config.get(
+                    section, "basic_auth_user", fallback=None
+                ),
+                basic_auth_pass=self.config.get(
+                    section, "basic_auth_pass", fallback=None
+                ),
                 proxy=self.config.get(section, "proxy", fallback=None),
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
                 client_key=self.config.get(section, "sslclientkey", fallback=None),
@@ -291,6 +303,7 @@ class PyRepoSync:
                 components=self.config.get(section, "components").split(),
                 binary_archs=self.config.get(section, "binary_archs").split(),
             )
+        return None
 
     def get_sections(self):
         sections = set()

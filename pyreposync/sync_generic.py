@@ -14,6 +14,8 @@ class SyncGeneric:
         reponame,
         date,
         allow_missing_packages,
+        basic_auth_user=None,
+        basic_auth_pass=None,
         proxy=None,
         client_cert=None,
         client_key=None,
@@ -25,7 +27,12 @@ class SyncGeneric:
         self._destination = destination
         self._reponame = reponame
         self.downloader = Downloader(
-            proxy=proxy, client_cert=client_cert, client_key=client_key, ca_cert=ca_cert
+            basic_auth_user=basic_auth_user,
+            basic_auth_pass=basic_auth_pass,
+            proxy=proxy,
+            client_cert=client_cert,
+            client_key=client_key,
+            ca_cert=ca_cert,
         )
         self.log = logging.getLogger("application")
 
