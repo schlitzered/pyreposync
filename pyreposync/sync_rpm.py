@@ -252,14 +252,15 @@ class SyncRPM(SyncGeneric):
     def snap_treeinfo(self):
         self.log.info("copy treeinfo")
         try:
-            dst = f"{self.destination}/snap/{self.reponame}/{self.destination}/{self.treeinfo}"
+            dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{self.treeinfo}"
             src = f"{self.destination}/sync/{self.reponame}/{self.treeinfo}"
             copyfile(src, dst)
         except (OSError, FileNotFoundError) as err:
             self.log.error(f"could not copy {self.treeinfo}: {err}")
+            self.log.error(dst)
         for location, hash_algo, hash_sum in self.treeinfo_files():
             dst = (
-                f"{self.destination}/snap/{self.reponame}/{self.destination}/{location}"
+                f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
             )
             src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:

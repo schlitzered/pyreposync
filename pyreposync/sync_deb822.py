@@ -1,8 +1,11 @@
 from shutil import copyfile
+import threading
 
 import gzip
+import lzma
 import os
 
+from pyreposync import OSRepoSyncException
 from pyreposync.sync_generic import SyncGeneric
 
 
@@ -55,15 +58,34 @@ class SyncDeb822(SyncGeneric):
         return self._components
 
     def _snap(self):
+        jobs = []
         for suite in self.suites:
-            self.snap_suites(suite=suite)
+            job = threading.Thread(
+                name=f"{threading.current_thread().name}_{suite}",
+                target=self.snap_suites,
+                kwargs={"suite": suite},
+            )
+            job.start()
+            jobs.append(job)
+        for job in jobs:
+            job.join()
 
     def snap_suites(self, suite):
         self.log.info(f"creating snapshot for suite {suite}")
         self.snap_release(suite=suite)
         self.snap_release_files(suite=suite)
-        for arch in self.binary_archs:
-            self.snap_package_binary_files(suite=suite, arch=arch)
+        jobs = []
+        for component in self.components:
+            for arch in self.binary_archs:
+                job = threading.Thread(
+                    name=f"{threading.current_thread().name}_{component}_{arch}",
+                    target=self.snap_package_binary_files,
+                    kwargs={"suite": suite, "component": component, "arch": arch},
+                )
+                job.start()
+                jobs.append(job)
+        for job in jobs:
+            job.join()
         self.log.info(f"creating snapshot for suite {suite}, done")
 
     def snap_release(self, suite):
@@ -99,11 +121,11 @@ class SyncDeb822(SyncGeneric):
                 pass
         self.log.info(f"creating snapshot for suite {suite} release files, done")
 
-    def snap_package_binary_files(self, suite, arch):
+    def snap_package_binary_files(self, suite, component, arch):
         self.log.info(
-            f"creating snapshot for suite {suite} arch {arch} package binary files"
+            f"creating snapshot for suite {suite} component {component} arch {arch} package binary files"
         )
-        packages = self.binary_files_sha256(suite=suite, component="main", arch=arch)
+        packages = self.binary_files_sha256(suite=suite, component=component, arch=arch)
         src_path = f"{self.destination}/sync/{self.reponame}"
         dst_path = f"{self.destination}/snap/{self.reponame}/{self.date}"
         for filename, sha256_dict in packages.items():
@@ -120,16 +142,35 @@ class SyncDeb822(SyncGeneric):
 
     def sync(self):
         self.log.info("starting thread")
+        jobs = []
         for suite in self.suites:
-            self.sync_suites(suite=suite)
+            job = threading.Thread(
+                name=f"{threading.current_thread().name}_{suite}",
+                target=self.sync_suites,
+                kwargs={"suite": suite},
+            )
+            job.start()
+            jobs.append(job)
+        for job in jobs:
+            job.join()
         self.log.info("shutdown thread complete")
 
     def sync_suites(self, suite):
         self.log.info(f"syncing suite {suite}")
         self.sync_release(suite=suite)
         self.sync_release_files(suite=suite)
-        for arch in self.binary_archs:
-            self.sync_package_binary_files(suite=suite, arch=arch)
+        jobs = []
+        for component in self.components:
+            for arch in self.binary_archs:
+                job = threading.Thread(
+                    name=f"{threading.current_thread().name}_{component}_{arch}",
+                    target=self.sync_package_binary_files,
+                    kwargs={"suite": suite, "component": component, "arch": arch},
+                )
+                job.start()
+                jobs.append(job)
+        for job in jobs:
+            job.join()
         self.log.info(f"syncing suite {suite}, done")
 
     def sync_release(self, suite):
@@ -146,9 +187,9 @@ class SyncDeb822(SyncGeneric):
             )
         self.log.info(f"syncing suite {suite} release files, done")
 
-    def sync_package_binary_files(self, suite, arch):
+    def sync_package_binary_files(self, suite, component, arch):
         self.log.info(f"syncing suite {suite} arch {arch} package binary files")
-        packages = self.binary_files_sha256(suite=suite, component="main", arch=arch)
+        packages = self.binary_files_sha256(suite=suite, component=component, arch=arch)
         base_path = f"{self.destination}/sync/{self.reponame}"
         base_url = f"{self.base_url}"
         for filename, sha256_dict in packages.items():
@@ -162,12 +203,26 @@ class SyncDeb822(SyncGeneric):
         self.log.info(f"syncing suite {suite} arch {arch} package binary files, done")
 
     def binary_files_sha256(self, suite, component, arch):
-        packages_gz_file = f"{self.destination}/sync/{self.reponame}/dists/{suite}/{component}/binary-{arch}/Packages.gz"
+        packages_file = f"{self.destination}/sync/{self.reponame}/dists/{suite}/{component}/binary-{arch}/Packages."
+        if os.path.isfile(f"{packages_file}gz"):
+            comp = gzip
+            packages_file += "gz"
+        elif os.path.isfile(f"{packages_file}xz"):
+            comp = lzma
+            packages_file += "xz"
+        else:
+            self.log.error(
+                f"no Packages.gz or Packages.xz file found for suite {suite}, component {component}, arch {arch}"
+            )
+            raise OSRepoSyncException(
+                f"no Packages.gz or Packages.xz file found for suite {suite}, component {component}, arch {arch}"
+            )
+
         packages = dict()
         sha256 = None
         filename = None
         size = None
-        with gzip.open(packages_gz_file, "rb") as source:
+        with comp.open(packages_file, "rb") as source:
             for line in source:
                 line = line.decode("utf-8")
                 if line.startswith("SHA256: "):
