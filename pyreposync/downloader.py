@@ -71,13 +71,11 @@ class Downloader(object):
 
         with open(destination, "rb") as dest:
             hasher.update(dest.read())
-            self.log.debug(f"expected hash: {hasher.hexdigest()}")
-            self.log.debug(f"actual hash: {checksum}")
             if hasher.hexdigest() == checksum:
-                self.log.debug(f"download valid: {destination}")
+                self.log.debug(f"download valid: {destination}, expected hash: {hasher.hexdigest()}, actual hash: {checksum}")
             else:
-                self.log.error(f"download invalid: {destination}")
-                raise OSRepoSyncHashError(f"download invalid: {destination}")
+                self.log.error(f"download invalid: {destination} expected hash: {hasher.hexdigest()}, actual hash: {checksum}")
+                raise OSRepoSyncHashError(f"download invalid: {destination} expected hash: {hasher.hexdigest()}, actual hash: {checksum}")
 
     def get(
         self,
@@ -88,11 +86,11 @@ class Downloader(object):
         replace=False,
         not_found_ok=False,
     ):
-        self.log.info(f"downloading: {url}")
         if not replace:
             if os.path.isfile(destination):
-                self.log.info("already there, not downloading")
+                self.log.debug(f"{url} already there, not downloading")
                 return
+        self.log.info(f"{url} downloading")
         retries = 10
         while retries >= 0:
             try:
@@ -107,7 +105,7 @@ class Downloader(object):
                             pass
                         else:
                             raise
-                self.log.info(f"done downloading: {url}")
+                self.log.info(f"{url} download done")
                 return
             except requests.exceptions.ConnectionError:
                 self.log.error("could not fetch resource, retry in 10 seconds")
@@ -119,8 +117,8 @@ class Downloader(object):
                 time.sleep(10)
             except OSRepoSyncDownLoadError:
                 break
-        self.log.error(f"could not download: {url}")
-        raise OSRepoSyncDownLoadError(f"could not download: {url}")
+        self.log.error(f"{url} could not download")
+        raise OSRepoSyncDownLoadError(f"{url} could not download")
 
     def create_dir(self, destination):
         if not os.path.isdir(os.path.dirname(destination)):
