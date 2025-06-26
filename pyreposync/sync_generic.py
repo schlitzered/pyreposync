@@ -78,7 +78,7 @@ class SyncGeneric:
             pass
         os.symlink(current, latest)
         with open(timestamp, "w") as _timestamp:
-            _timestamp.write(f"{self.destination}\n")
+            _timestamp.write(f"{self.date}\n")
         self.log.info("done creating snapshot")
 
     def snap_cleanup(self):
