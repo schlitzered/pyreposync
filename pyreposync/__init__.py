@@ -320,7 +320,7 @@ class PyRepoSync:
 
     def work(self):
         self.log.info("starting up")
-        date = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d%H%M%S")
+        date = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
         queue = collections.deque()
         for section in self.get_sections():
             queue.append(self.get_job(date=date, section=section))
