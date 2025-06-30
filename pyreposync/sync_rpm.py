@@ -6,8 +6,9 @@ import lzma
 import configparser
 import os
 import shutil
-
 import xml.etree.ElementTree
+
+import zstandard
 
 from pyreposync.sync_generic import SyncGeneric
 
@@ -71,6 +72,9 @@ class SyncRPM(SyncGeneric):
                     root = xml.etree.ElementTree.parse(source).getroot()
             elif primary.endswith(".xz"):
                 with lzma.open(primary, "rb") as source:
+                    root = xml.etree.ElementTree.parse(source).getroot()
+            elif primary.endswith(".zst"):
+                with zstandard.open(primary, "rb") as source:
                     root = xml.etree.ElementTree.parse(source).getroot()
             else:
                 with open(primary, "rb") as source:
@@ -259,9 +263,7 @@ class SyncRPM(SyncGeneric):
             self.log.error(f"could not copy {self.treeinfo}: {err}")
             self.log.error(dst)
         for location, hash_algo, hash_sum in self.treeinfo_files():
-            dst = (
-                f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
-            )
+            dst = f"{self.destination}/snap/{self.reponame}/{self.date}/{location}"
             src = f"{self.destination}/sync/{self.reponame}/{location}"
             try:
                 os.makedirs(os.path.dirname(dst))
