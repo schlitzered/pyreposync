@@ -63,32 +63,42 @@ class SyncRPM(SyncGeneric):
             self.log.fatal("no primary.xml found in repomd.xml")
             raise OSRepoSyncException("no primary.xml found in repomd.xml")
 
+        if primary.endswith(".gz"):
+            opener = gzip.open
+        elif primary.endswith(".bz2"):
+            opener = bz2.open
+        elif primary.endswith(".xz"):
+            opener = lzma.open
+        elif primary.endswith(".zst"):
+            opener = zstandard.open
+        else:
+            opener = open
+
         try:
-            if primary.endswith(".gz"):
-                with gzip.open(primary, "rb") as source:
-                    root = xml.etree.ElementTree.parse(source).getroot()
-            elif primary.endswith(".bz2"):
-                with bz2.open(primary, "rb") as source:
-                    root = xml.etree.ElementTree.parse(source).getroot()
-            elif primary.endswith(".xz"):
-                with lzma.open(primary, "rb") as source:
-                    root = xml.etree.ElementTree.parse(source).getroot()
-            elif primary.endswith(".zst"):
-                with zstandard.open(primary, "rb") as source:
-                    root = xml.etree.ElementTree.parse(source).getroot()
-            else:
-                with open(primary, "rb") as source:
-                    root = xml.etree.ElementTree.parse(source).getroot()
+            with opener(primary, "rb") as source:
+                context = xml.etree.ElementTree.iterparse(
+                    source, events=("start", "end")
+                )
+                _, root = next(context)
+                for event, elem in context:
+                    if (
+                        event == "end"
+                        and elem.tag
+                        == "{http://linux.duke.edu/metadata/common}package"
+                    ):
+                        checksum = elem.find(
+                            "{http://linux.duke.edu/metadata/common}checksum"
+                        )
+                        hash_algo = checksum.get("type")
+                        hash_sum = checksum.text
+                        location = elem.find(
+                            "{http://linux.duke.edu/metadata/common}location"
+                        )
+                        yield location.get("href"), hash_algo, hash_sum
+                        root.clear()
         except xml.etree.ElementTree.ParseError as err:
             self.log.fatal(f"could not parse {primary}: {err}")
             raise OSRepoSyncException(f"could not parse {primary}: {err}")
-        packages = root.findall("{http://linux.duke.edu/metadata/common}package")
-        for package in packages:
-            checksum = package.find("{http://linux.duke.edu/metadata/common}checksum")
-            hash_algo = checksum.get("type")
-            hash_sum = checksum.text
-            location = package.find("{http://linux.duke.edu/metadata/common}location")
-            yield location.get("href"), hash_algo, hash_sum
 
     def migrate(self):
         migrated_file = f"{self.destination}/sync/{self.reponame}/migrated"
