@@ -117,6 +117,14 @@ class Downloader(object):
                 time.sleep(10)
             except OSRepoSyncDownLoadError:
                 break
+            except OSError as err:
+                self.log.error(f"could not write to destination, retry in 10 seconds: {err}")
+                retries -= 1
+                time.sleep(10)
+            except requests.exceptions.Timeout as err:
+                self.log.error(f"request timed out, retry in 10 seconds: {err}")
+                retries -= 1
+                time.sleep(10)
         self.log.error(f"{url} could not download")
         raise OSRepoSyncDownLoadError(f"{url} could not download")
 
@@ -144,12 +152,13 @@ class Downloader(object):
             proxies=self.proxy,
             cert=self.cert,
             verify=self.ca_cert,
+            timeout=(30, 300),
         )
         if r.status_code == 200:
             with open(destination, "wb", 0) as dst:
-                r.raw.decode_content = True
-                shutil.copyfileobj(r.raw, dst)
-                dst.flush()
+                for chunk in r.iter_content(chunk_size=65536):
+                    if chunk:
+                        dst.write(chunk)
         else:
             if not_found_ok:
                 if r.status_code == 404:
