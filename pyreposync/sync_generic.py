@@ -20,6 +20,7 @@ class SyncGeneric:
         client_cert=None,
         client_key=None,
         ca_cert=None,
+        timeout=None,
     ):
         self._allow_missing_packages = allow_missing_packages
         self._base_url = base_url
@@ -33,12 +34,17 @@ class SyncGeneric:
             client_cert=client_cert,
             client_key=client_key,
             ca_cert=ca_cert,
+            timeout=timeout,
         )
         self.log = logging.getLogger("application")
 
     @property
     def allow_missing_packages(self):
         return self._allow_missing_packages
+
+    @property
+    def timeout(self):
+        return self.downloader.timeout
 
     @property
     def base_url(self):

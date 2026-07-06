@@ -26,6 +26,7 @@ class SyncDeb822(SyncGeneric):
         client_cert=None,
         client_key=None,
         ca_cert=None,
+        timeout=None,
     ):
         super().__init__(
             base_url=base_url,
@@ -39,6 +40,7 @@ class SyncDeb822(SyncGeneric):
             client_cert=client_cert,
             client_key=client_key,
             ca_cert=ca_cert,
+            timeout=timeout,
         )
         self._binary_archs = binary_archs
         self._components = components

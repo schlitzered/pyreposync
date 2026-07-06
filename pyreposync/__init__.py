@@ -208,6 +208,33 @@ class PyRepoSync:
     def timestamp(self):
         return self._timestamp
 
+    def get_timeout(self, section):
+        timeout_connect = self.config.getint(
+            section=section,
+            option="timeout_connect",
+            fallback=None,
+        )
+        if timeout_connect is None:
+            timeout_connect = self.config.getint(
+                section="main",
+                option="timeout_connect",
+                fallback=30,
+            )
+
+        timeout_read = self.config.getint(
+            section=section,
+            option="timeout_read",
+            fallback=None,
+        )
+        if timeout_read is None:
+            timeout_read = self.config.getint(
+                section="main",
+                option="timeout_read",
+                fallback=300,
+            )
+
+        return (timeout_connect, timeout_read)
+
     def _logging(self):
         logfmt = logging.Formatter(
             "%(asctime)sUTC - %(levelname)s - %(threadName)s - %(message)s"
@@ -259,6 +286,9 @@ class PyRepoSync:
 
     def get_job(self, date, section):
         self.log.info(f"section name: {section}")
+        timeout = self.get_timeout(
+            section=section,
+        )
         if section.endswith(":rpm"):
             return SyncRPM(
                 base_url=self.config.get(section, "baseurl"),
@@ -279,6 +309,7 @@ class PyRepoSync:
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
                 client_key=self.config.get(section, "sslclientkey", fallback=None),
                 ca_cert=self.config.get(section, "sslcacert", fallback=None),
+                timeout=timeout,
             )
         elif section.endswith(":deb822"):
             return SyncDeb822(
@@ -302,6 +333,7 @@ class PyRepoSync:
                 suites=self.config.get(section, "suites").split(),
                 components=self.config.get(section, "components").split(),
                 binary_archs=self.config.get(section, "binary_archs").split(),
+                timeout=timeout,
             )
         return None
 
@@ -481,7 +513,9 @@ class RepoSyncThread(threading.Thread):
             self.status = 1
 
     def do_validate(self, job):
-        _downloader = Downloader()
+        _downloader = Downloader(
+            timeout=job.timeout,
+        )
         packages = dict()
         try:
             self.log.info(f"{self.action} start repo {job.reponame}")

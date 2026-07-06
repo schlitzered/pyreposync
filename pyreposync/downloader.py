@@ -20,6 +20,7 @@ class Downloader(object):
         client_cert=None,
         client_key=None,
         ca_cert=None,
+        timeout=None,
     ):
         self.log = logging.getLogger("application")
         if basic_auth_user and basic_auth_pass:
@@ -38,6 +39,10 @@ class Downloader(object):
             self._ca_cert = ca_cert
         else:
             self._ca_cert = True
+        if timeout:
+            self._timeout = timeout
+        else:
+            self._timeout = (30, 300)
 
     @property
     def basic_auth(self):
@@ -54,6 +59,10 @@ class Downloader(object):
     @property
     def proxy(self):
         return self._proxy
+
+    @property
+    def timeout(self):
+        return self._timeout
 
     def check_hash(self, destination, checksum, hash_type):
         self.log.debug("validating hash")
@@ -100,9 +109,9 @@ class Downloader(object):
                     self.create_dir(destination)
                     try:
                         shutil.move(tmp_file, destination)
-                    except OSError:
+                    except OSError as err:
                         if not_found_ok:
-                            pass
+                            self.log.info(f"could not move temporary file: {err}")
                         else:
                             raise
                 self.log.info(f"{url} download done")
@@ -146,13 +155,13 @@ class Downloader(object):
     ):
         self.create_dir(destination)
         r = requests.get(
-            url,
+            url=url,
             auth=self.basic_auth,
             stream=True,
             proxies=self.proxy,
             cert=self.cert,
             verify=self.ca_cert,
-            timeout=(30, 300),
+            timeout=self.timeout,
         )
         if r.status_code == 200:
             with open(destination, "wb", 0) as dst:
