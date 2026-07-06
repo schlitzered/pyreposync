@@ -30,6 +30,18 @@ Configuration options in the ``[main]`` section:
 * ``timeout_connect``: Default connect timeout in seconds (default: 30).
 * ``timeout_read``: Default read timeout in seconds (default: 300).
 
+Example ``[main]`` section:
+
+.. code-block:: ini
+
+    [main]
+    destination = /var/spool/pyreposync
+    downloaders = 10
+    loglevel = INFO
+    proxy = http://proxy.example.com:3128
+    timeout_connect = 30
+    timeout_read = 300
+
 RPM Repository Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -44,6 +56,10 @@ RPM sections use the format ``[<reponame>:rpm]``:
     # Optional authentication
     basic_auth_user = myuser
     basic_auth_pass = mypass
+    # Optional SSL client certificate authentication (e.g. for RHEL)
+    sslclientcert = /etc/pki/entitlement/12345.pem
+    sslclientkey = /etc/pki/entitlement/12345-key.pem
+    sslcacert = /etc/rhsm/ca/redhat-uep.pem
     # Optional repo-specific proxy configuration
     proxy = http://proxy.example.com:3128
     # Optional specific timeouts
