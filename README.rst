@@ -26,7 +26,7 @@ Configuration options in the ``[main]`` section:
 * ``destination``: (Required) Path where synced repositories and snapshots will be stored.
 * ``downloaders``: Number of parallel downloader threads (default: 1).
 * ``loglevel``: Logging level (e.g., ``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``).
-* ``proxy``: Global proxy server URL (e.g., ``http://proxy.example.com:3128``). Used for RPM repositories and as fallback for Deb822.
+* ``proxy``: Global proxy server URL (e.g., ``http://proxy.example.com:3128``). Used as a fallback for both RPM and Deb822 repositories.
 * ``timeout_connect``: Default connect timeout in seconds (default: 30).
 * ``timeout_read``: Default read timeout in seconds (default: 300).
 
@@ -44,6 +44,8 @@ RPM sections use the format ``[<reponame>:rpm]``:
     # Optional authentication
     basic_auth_user = myuser
     basic_auth_pass = mypass
+    # Optional repo-specific proxy configuration
+    proxy = http://proxy.example.com:3128
     # Optional specific timeouts
     timeout_connect = 15
     timeout_read = 120
