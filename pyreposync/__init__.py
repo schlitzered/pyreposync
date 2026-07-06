@@ -235,6 +235,20 @@ class PyRepoSync:
 
         return (timeout_connect, timeout_read)
 
+    def get_proxy(self, section):
+        proxy = self.config.get(
+            section=section,
+            option="proxy",
+            fallback=None,
+        )
+        if proxy is None:
+            proxy = self.config.get(
+                section="main",
+                option="proxy",
+                fallback=None,
+            )
+        return proxy
+
     def _logging(self):
         logfmt = logging.Formatter(
             "%(asctime)sUTC - %(levelname)s - %(threadName)s - %(message)s"
@@ -289,6 +303,9 @@ class PyRepoSync:
         timeout = self.get_timeout(
             section=section,
         )
+        proxy = self.get_proxy(
+            section=section,
+        )
         if section.endswith(":rpm"):
             return SyncRPM(
                 base_url=self.config.get(section, "baseurl"),
@@ -305,7 +322,7 @@ class PyRepoSync:
                 basic_auth_pass=self.config.get(
                     section, "basic_auth_pass", fallback=None
                 ),
-                proxy=self.config.get("main", "proxy", fallback=None),
+                proxy=proxy,
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
                 client_key=self.config.get(section, "sslclientkey", fallback=None),
                 ca_cert=self.config.get(section, "sslcacert", fallback=None),
@@ -326,7 +343,7 @@ class PyRepoSync:
                 basic_auth_pass=self.config.get(
                     section, "basic_auth_pass", fallback=None
                 ),
-                proxy=self.config.get(section, "proxy", fallback=None),
+                proxy=proxy,
                 client_cert=self.config.get(section, "sslclientcert", fallback=None),
                 client_key=self.config.get(section, "sslclientkey", fallback=None),
                 ca_cert=self.config.get(section, "sslcacert", fallback=None),
